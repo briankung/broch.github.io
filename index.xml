@@ -1,0 +1,868 @@
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>broch.tech</title><link>https://broch.tech/</link><description>Recent content on broch.tech</description><language>en-gb</language><lastBuildDate>Thu, 25 Feb 2021 00:00:00 +0000</lastBuildDate><atom:link href="https://broch.tech/index.xml" rel="self" type="application/rss+xml"/><item><title>Checking Password Strength in Elm, Part 2: Have I Been Pwned API</title><link>https://broch.tech/posts/elm-have-i-been-pwned/</link><pubDate>Mon, 05 Mar 2018 00:00:00 +0000</pubDate><guid>https://broch.tech/posts/elm-have-i-been-pwned/</guid><description>&lt;p>In the &lt;a href="https://broch.tech/posts/elm-zxcvbn">Part 1&lt;/a>, we used the Javascript library Zxcvn to check the strength of a password locally. Now we&amp;rsquo;ll extend the code to check the chosen password against the huge database maintained by &lt;a href="https://haveibeenpwned.com">Have I been pwned?&lt;/a>. The code for this part is similar, but instead of decoding the result of a call to Javascript to obtain our data, we make an HTTP request and decode the response.&lt;/p>
+&lt;p>The full code for both parts can be found &lt;a href="https://github.com/tekul/elm-password-check">on github&lt;/a>.&lt;/p>
+&lt;div class="w-full px-10 py-10 border rounded-md shadow mx-auto sm:w-2/3">
+&lt;div id="app">&lt;/div>
+&lt;/div>
+&lt;script src="https://broch.tech/posts/elm-zxcvbn/app.js">&lt;/script>
+&lt;script>
+var app = Elm.Main.init({
+node: document.getElementById('app'),
+flags: {}
+});
+app.ports.checkPassword.subscribe(function(password) {
+var report = zxcvbn(password);
+app.ports.passwordChecked.send(report);
+});
+&lt;/script>
+&lt;script async src="https://broch.tech/js/zxcvbn.js">&lt;/script>
+&lt;h2 id="using-the-password-api">Using the Password API&lt;/h2>
+&lt;p>The API requires that we pass the first 5 hexadecimal characters of the SHA-1 hash of our password:&lt;/p>
+&lt;pre>&lt;code class="language-plain">GET https://api.pwnedpasswords.com/range/{first 5 hash chars}
+&lt;/code>&lt;/pre>
+&lt;p>and it returns a list of all the suffixes of hashes with this prefix, along with the number of times each password has been found, with a colon separator &lt;sup id="fnref:1">&lt;a href="#fn:1" class="footnote-ref" role="doc-noteref">1&lt;/a>&lt;/sup>. For example, if we enter the very common password &amp;ldquo;password1&amp;rdquo;, the SHA-1 is &lt;code>e38ad214943daad1d64c102faec29de4afe9da3d&lt;/code>. If we sent a request using the &lt;code>curl&lt;/code> command:&lt;/p>
+&lt;pre>&lt;code class="language-shell-session">$ curl https://api.pwnedpasswords.com/range/e38ad
+...
+209CE6FC85F5F7B39B1FADE957076C018B7:2
+20ECFBB285A5C09DE3F6DE40C6CA9F6C894:2
+20F30490A32AA3D98A3F9BE594B2CAD8A80:2
+214943DAAD1D64C102FAEC29DE4AFE9DA3D:2427158
+223EA20780C7ED887D68E405AA5DB5BEF5D:9
+2245E23E0F38934B77332C823D186739509:3
+22615754CF7175ED94BDED305D7172FFF35:2
+...
+&lt;/code>&lt;/pre>
+&lt;p>we can pick the remaining suffix (&lt;code>214943daad1d64c102faec29de4afe9da3d&lt;/code>) out of the response and see that this password was found almost 2.5 million times! Definitely one to avoid.&lt;/p>
+&lt;h2 id="calculating-the-sha-1">Calculating the SHA-1&lt;/h2>
+&lt;p>The first thing we need to be able to do is calculate SHA-1 values. Fortunately, someone has already written an &lt;a href="https://package.elm-lang.org/packages/TSFoster/elm-sha1/latest/">Elm package which does just that&lt;/a>.&lt;/p>
+&lt;p>We write our own &lt;code>sha1&lt;/code> function to make sure we are always using upper-case Hex values. The API used Hex encoding and thought it isn&amp;rsquo;t case sensitive, the response is always upper-case and we&amp;rsquo;re going to be comparing with those values.&lt;/p>
+&lt;pre>&lt;code class="language-elm">sha1 : String -&amp;gt; String
+sha1 s =
+SHA1.fromString s
+|&amp;gt; SHA1.toHex
+|&amp;gt; String.toUpper
+&lt;/code>&lt;/pre>
+&lt;h2 id="making-the-request">Making The Request&lt;/h2>
+&lt;p>This is very simple, using the standard &lt;code>elm/http&lt;/code> package:&lt;/p>
+&lt;pre>&lt;code class="language-elm">getPwnedMatches : String -&amp;gt; Cmd Msg
+getPwnedMatches password =
+Http.get
+{ url = &amp;quot;https://api.pwnedpasswords.com/range/&amp;quot; ++ String.left 5 (sha1 password)
+, expect = Http.expectString PwnedResults
+}
+&lt;/code>&lt;/pre>
+&lt;p>The &lt;code>PwnedResults&lt;/code> msg is called when we get a response back from the API. So we need to add this to our &lt;code>Msg&lt;/code> type:&lt;/p>
+&lt;pre>&lt;code class="language-elm">type Msg
+= SetPassword String
+| ZxcvbnChecked Json.Value
+| CheckPwned
+| PwnedResults (Result Http.Error String)
+&lt;/code>&lt;/pre>
+&lt;p>There&amp;rsquo;s also a &lt;code>CheckPwned&lt;/code> message which is received when the user clicks the button to submit the form. That&amp;rsquo;s when we send the request.&lt;/p>
+&lt;h2 id="decoding-the-response">Decoding The Response&lt;/h2>
+&lt;p>We don&amp;rsquo;t use a JSON decoder here since the API returns a text response, as described above.&lt;/p>
+&lt;p>The code to decode the response is (slightly simplified):&lt;/p>
+&lt;pre>&lt;code class="language-elm">pwnedCountFromResponse : String -&amp;gt; String -&amp;gt; Maybe Int
+pwnedCountFromResponse password response =
+let
+suffix =
+sha1 password |&amp;gt; String.dropLeft 5
+in
+String.lines response
+|&amp;gt; List.filter (String.startsWith suffix)
+|&amp;gt; List.head
+|&amp;gt; Maybe.map (String.dropLeft 36)
+|&amp;gt; Maybe.andThen String.toInt
+&lt;/code>&lt;/pre>
+&lt;p>We find our SHA-1&amp;rsquo;s suffix in the list (if it&amp;rsquo;s there), drop the 36 characters up to and including the colon, and then convert the remainder to an integer. The count value is stored in the model and used to present a suitable message to the user.&lt;/p>
+&lt;h1 id="conclusion">Conclusion&lt;/h1>
+&lt;p>&amp;ldquo;Have I Been Pwned?&amp;rdquo; is a great resource for accessing information on data breaches (you can also search by your email or phone number). It can be used to complement the Zxcvbn but also has the benefit that it uses real-world data, so it is less likely to miss things that Zxcvbn might, due to language differences, keyboard layouts and so on.&lt;/p>
+&lt;p>You might want to prevent a user from choosing a password which is found in HIBP if they are registering an account. Even if the password only has one or two matches, in a worst case scenario, your user may be reusing a password which is tied to their account in a data breach that is publicly available. Even if a password is completely random and theoretically unbreakable when hashed properly, it&amp;rsquo;s useless once it&amp;rsquo;s been compromised at a company which stored everything in plain text (and there have been plenty of those).&lt;/p>
+&lt;p>How strict you are about password policy obviously depends on what the account is for. If you have serious security requirements then passwords alone probably aren&amp;rsquo;t up to the job, no matter how strong they are, and an extra multi-factor authentication solution should be used.&lt;/p>
+&lt;section class="footnotes" role="doc-endnotes">
+&lt;hr>
+&lt;ol>
+&lt;li id="fn:1" role="doc-endnote">
+&lt;p>Note that a Hex encoded SHA-1 value is 40 characters long, so the suffixes we get back are 35 characters.&amp;#160;&lt;a href="#fnref:1" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;/ol>
+&lt;/section></description></item><item><title>Checking Password Strength in Elm, Part 1: Zxcvbn</title><link>https://broch.tech/posts/elm-zxcvbn/</link><pubDate>Sun, 04 Mar 2018 00:00:00 +0000</pubDate><guid>https://broch.tech/posts/elm-zxcvbn/</guid><description>&lt;p>As part of a recent Elm project, I wrote some front-end user registration code which required that new users choose a password. I used the &lt;a href="https://github.com/dropbox/zxcvbn">zxcvbn&lt;/a> library to measure password strength and this seems like a good, non-trivial example to show how to call Javascript from Elm. In &lt;a href="https://broch.tech/posts/elm-have-i-been-pwned">Part 2&lt;/a>, we&amp;rsquo;ll look at how to add extra checks by calling the &lt;a href="https://haveibeenpwned.com/API/v3#PwnedPasswords">Have I Been Pwned passwords API&lt;/a> which maintains a database of half a billion compromised password hashes.&lt;/p>
+&lt;p>The full code for both parts can be found &lt;a href="https://github.com/tekul/elm-password-check">on github&lt;/a>.&lt;/p>
+&lt;p>Zxcvbn is a password strength estimator which makes use of password frequency lists, dictionaries and common patterns. Note that the default version is heavily biased towards English language so it would need to be built with custom dictionaries if that&amp;rsquo;s an issue &lt;sup id="fnref:1">&lt;a href="#fn:1" class="footnote-ref" role="doc-noteref">1&lt;/a>&lt;/sup>.&lt;/p>
+&lt;p>The strength of a password is based on estimating the number of guesses it would take for a password cracker to find it. It&amp;rsquo;s not perfect, but is better than forcing annoying rules on users such as adding &lt;a href="https://www.xkcd.com/936/">numbers and symbols to passwords&lt;/a> which is no longer seen as good practice. Standards authorities like NIST now &lt;a href="https://stealthbits.com/blog/nist-password-guidelines/">recommend&lt;/a> disallowing simple sequences and rejecting passwords which are found in password breach databases.&lt;/p>
+&lt;div id="elm-zxcvbn-app" class="w-full mt-10 px-10 py-10 border rounded-md shadow mx-auto sm:w-2/3">
+&lt;div id="app">&lt;/div>
+&lt;/div>
+&lt;script src="app.js">&lt;/script>
+&lt;script>
+var app = Elm.Main.init({
+node: document.getElementById('app'),
+flags: {}
+});
+app.ports.checkPassword.subscribe(function(password) {
+var report = zxcvbn(password);
+app.ports.passwordChecked.send(report);
+});
+&lt;/script>
+&lt;script async src="https://broch.tech/js/zxcvbn.js">&lt;/script>
+&lt;h2 id="elm-ports">Elm Ports&lt;/h2>
+&lt;p>From Elm, we want to be able to call a &lt;code>checkPassword&lt;/code> function, passing the password as a string. This function is a &amp;ldquo;port&amp;rdquo;, so the Elm runtime knows to call an external Javascript function as the implementation.&lt;/p>
+&lt;pre>&lt;code class="language-elm">port checkPassword : String -&amp;gt; Cmd msg
+port passwordChecked : (Json.Value -&amp;gt; msg) -&amp;gt; Sub msg
+&lt;/code>&lt;/pre>
+&lt;p>Zxcvbn produces a JSON value containing a score for the password and information about how the score was calculated. The second port, &lt;code>passwordChecked&lt;/code> allows us to subscribe to the Zxcvbn response. The responses will then be received as messages through the application &lt;code>update&lt;/code> function.&lt;/p>
+&lt;h2 id="javascript">Javascript&lt;/h2>
+&lt;p>In Javascript we need to hook up our port implementations to Javascript code. The &lt;code>checkPassword&lt;/code> function is just implemented as a call to the &lt;code>zxcvbn&lt;/code> function, passing in the password. It then sends the response back through the &lt;code>passwordChecked&lt;/code> port.&lt;/p>
+&lt;pre>&lt;code class="language-javascript">app.ports.checkPassword.subscribe(function(password) {
+var report = zxcvbn(password);
+app.ports.passwordChecked.send(report);
+});
+&lt;/code>&lt;/pre>
+&lt;h2 id="decoding-json">Decoding JSON&lt;/h2>
+&lt;p>When we receive the Zxcvbn report as a JSON value, we decode it into a matching Elm data structure to make sure it contains what we expect and to make it easier to work with:&lt;/p>
+&lt;pre>&lt;code class="language-elm">type alias Zxcvbn =
+{ password : String
+, guesses : Float
+, guessesLog10 : Float
+, calcTime : Int
+, crackTimesSeconds : CrackTimesSeconds
+, crackTimesDisplay : CrackTimesDisplay
+, score : Int
+, feedback : Feedback
+, matchSequence : List String
+}
+&lt;/code>&lt;/pre>
+&lt;p>Writing decoders in Elm is straightforward enough but requires quite a lot of boilerplate code. You can check the github repo for details. The call to Zxcvbn returns a lot of data, most of which isn&amp;rsquo;t needed for a real-world application. Even though the &lt;code>Zxcvbn&lt;/code> Elm record type above retains most of that data it could be a lot simpler &lt;sup id="fnref:2">&lt;a href="#fn:2" class="footnote-ref" role="doc-noteref">2&lt;/a>&lt;/sup>. For a real application, we would probably only need the &lt;code>score&lt;/code> and &lt;code>feedback&lt;/code> fields to provide the strength meter and information on why particular passwords are unsuitable. The decoder would then also be a lot simpler. For a demo like this though, it&amp;rsquo;s interesting to show how a password is matched by the library.&lt;/p>
+&lt;h2 id="the-main-module">The Main module&lt;/h2>
+&lt;p>The rest of the code is a standard Elm application. We have a simple model to contain the entered password and the decoded Zxcvbn report&lt;/p>
+&lt;pre>&lt;code class="language-elm">type alias Model =
+{ password : String
+, zxcvbn : Maybe Zxcvbn
+}
+&lt;/code>&lt;/pre>
+&lt;p>In our &lt;code>update&lt;/code> function we need to handle messages for both password input and password check responses&lt;/p>
+&lt;pre>&lt;code class="language-elm">type Msg
+= SetPassword String
+| PasswordChecked Json.Value
+&lt;/code>&lt;/pre>
+&lt;p>The first message constructor is handled by just setting the password value in the model. For the second we call the Zxcvbn decoder and set the &lt;code>zxcvbn&lt;/code> field in the model. The &lt;code>view&lt;/code> function just renders an HTML input field for the password and shows the strength information for the entered value.&lt;/p>
+&lt;p>It&amp;rsquo;s important that we remember to include the &lt;code>passwordChecked&lt;/code> port in our &lt;code>subscriptions&lt;/code> function so that we receive responses from the Javascript code. These will arrive wrapped in a &lt;code>PasswordChecked&lt;/code> message&lt;/p>
+&lt;pre>&lt;code class="language-elm">subscriptions : Model -&amp;gt; Sub Msg
+subscriptions _ =
+passwordChecked PasswordChecked
+&lt;/code>&lt;/pre>
+&lt;h2 id="conclusion">Conclusion&lt;/h2>
+&lt;p>It&amp;rsquo;s quite easy to make use of a Javascript library like Zxcvbn, getting it to do a lot of work for us, but without compromising the safety of our Elm code. Ports provide a boundary which forces us to decode the data we get from Javascript into type-safe values before using them.&lt;/p>
+&lt;p>In the second part, we&amp;rsquo;ll look at calling an external API to get extra information on the suitability of our chosen password.&lt;/p>
+&lt;section class="footnotes" role="doc-endnotes">
+&lt;hr>
+&lt;ol>
+&lt;li id="fn:1" role="doc-endnote">
+&lt;p>For example, it will flag up &amp;ldquo;iloveyou&amp;rdquo; as being one of the most common passwords but it doesn&amp;rsquo;t have a problem with &amp;ldquo;ichliebedich&amp;rdquo;. Have I Been Pwned? doesn&amp;rsquo;t suffer from this issue and will tell you that the latter has been found more than 16000 times in password data breaches, so is clearly unsuitable.&amp;#160;&lt;a href="#fnref:1" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:2" role="doc-endnote">
+&lt;p>The &lt;code>matchSequence&lt;/code> field is simplified to just include a list of matched tokens and the pattern type (dictionary, date, keyboard sequence etc.) rather than the full details for each sub-match.&amp;#160;&lt;a href="#fnref:2" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;/ol>
+&lt;/section></description></item><item><title>Double-Slit Diffraction in Elm</title><link>https://broch.tech/posts/double-slits-elm/</link><pubDate>Mon, 02 Jan 2017 00:00:00 +0000</pubDate><guid>https://broch.tech/posts/double-slits-elm/</guid><description>&lt;p>I&amp;rsquo;ve been meaning to try &lt;a href="http://elm-lang.org">Elm&lt;/a> for some time and finally made the effort to write some code. It&amp;rsquo;s a demo of the &lt;a href="https://en.wikipedia.org/wiki/Double-slit_experiment">double-slits experiment&lt;/a>. I already had some Java code which I wrote ages ago, but I&amp;rsquo;ve never got round to converting it to Javascript &lt;sup id="fnref:1">&lt;a href="#fn:1" class="footnote-ref" role="doc-noteref">1&lt;/a>&lt;/sup>. Elm seems like a nice alternative so I decided to give it a try.&lt;/p>
+&lt;div style="margin: 0 auto; width: 750px; height: 500px;">
+&lt;div id="slits">&lt;/div>
+&lt;/div>
+&lt;div id="controls" class="mt-2">
+&lt;label for="numSlits">Number of slits&lt;/label>
+&lt;select id="numSlits" onchange="changeSlits()">
+&lt;option value="1">1&lt;/option>
+&lt;option value="2" selected>2&lt;/option>
+&lt;option value="3">3&lt;/option>
+&lt;option value="4">4&lt;/option>
+&lt;option value="5">5&lt;/option>
+&lt;option value="6">6&lt;/option>
+&lt;/select>
+&lt;/div>
+&lt;script src="slits.js">&lt;/script>
+&lt;script>
+var app = Elm.Main.init({
+node: document.getElementById('slits'),
+flags: { width: 750, height: 500 }
+});
+var nSlitsNode = document.getElementById('numSlits');
+nSlitsNode.options[1].selected = true;
+function changeSlits() {
+app.ports.numberOfSlits.send(Number(nSlitsNode.value));
+}
+&lt;/script>
+&lt;p>The app shows the light source, slits and the screen with an intensity graph of the diffraction pattern. An enlarged representation of the slits is shown on the left. Slits can be dragged about or resized and the diffraction pattern updates accordingly. You can also change the number of slits, making this a rather poorly named article, but the double-slit case is the most famous.&lt;/p>
+&lt;p>The code is &lt;a href="https://github.com/tekul/elm-slits">on github&lt;/a>. Most of it is pretty easy to follow if you&amp;rsquo;ve read the standard &lt;a href="https://guide.elm-lang.org/">introduction to elm&lt;/a>. It also includes some use of SVG and drag and drop and the use of ports to interact with the outside.&lt;/p>
+&lt;h2 id="overview">Overview&lt;/h2>
+&lt;p>The most important part of the model is the &lt;a href="https://github.com/tekul/elm-slits/blob/4232544c5f5c74734ada4d81667b788c33044c7f/src/Model.elm#L27">list of slits&lt;/a> which provides the zoomed-in view of the slit array. A slit is represented by the y coordinates of its edges. Changes to the slits cause updates both in their representation in the UI and in the diffraction pattern which is rendered. The model also contains a representation of the current drag state. This is similar to the standard &lt;a href="http://elm-lang.org/examples/drag">elm drag and drop example&lt;/a> but with a few changes to deal with the differences between the page and SVG coordinate systems. It contains the starting y-coordinate, the slit being dragged and also a &lt;code>DragType&lt;/code> value. This captures the fact that a slit can be either moved or resized by dragging it, depending on whether you click nearer the middle or the edge. The coordinates of the slit array and the screen onto which the diffraction pattern is projected are also stored but are just fixed values.&lt;/p>
+&lt;pre>&lt;code class="language-elm">type Slit = Slit Int Int
+type Drag = Drag DragType Int Slit
+type alias Model =
+{ slits : List Slit
+, slitsXY : (Int, Int)
+, screen : Screen
+, drag : Maybe Drag
+}
+type DragType
+= WholeSlit
+| Bottom
+| Top
+type Msg
+= DragStart Int Int
+| DragAt Int
+| DragEnd
+| NumSlits Int
+&lt;/code>&lt;/pre>
+&lt;h3 id="dealing-with-coordinates">Dealing with Coordinates&lt;/h3>
+&lt;p>Since the slits are dragged vertically, we only need to worry about the y-coordinate of mouse events. However, we need the coordinate relative to the SVG element whereas Elm&amp;rsquo;s mouse events are relative to the origin of the page &lt;sup id="fnref:2">&lt;a href="#fn:2" class="footnote-ref" role="doc-noteref">2&lt;/a>&lt;/sup>. This is fine if the application is in the top-left of the page, but if it is embedded in another page (as above), the coordinate systems no longer coincide and we need to translate between them. To do this, I created a transparent overlay rectangle which sits over the slits display, and attached a &lt;a href="https://github.com/tekul/elm-slits/blob/da067c50569cb45409e23ab1df5714ba38896fc1/src/View.elm#L62">separate &lt;code>mousedown&lt;/code> handler&lt;/a> which creates a &lt;code>DragStart&lt;/code> message containing both the &lt;code>pageY&lt;/code> and &lt;a href="https://developer.mozilla.org/en-US/docs/Web/API/MouseEvent/offsetY">&lt;code>offsetY&lt;/code>&lt;/a> values. Since the overlay rectangle covers the full height of the slits, &lt;code>pageY - offsetY&lt;/code> gives the y-origin of the SVG element in page coordinates and that allows us to translate future mouse move events from Elm to our SVG frame of reference.&lt;/p>
+&lt;h3 id="interaction-with-javascript">Interaction with Javascript&lt;/h3>
+&lt;p>If you look at the source for this page, you&amp;rsquo;ll see that the select control for setting the number of slits isn&amp;rsquo;t actually part of the Elm application (though it could easily be). I decided to experiment with using a &lt;a href="https://guide.elm-lang.org/interop/javascript.html">port&lt;/a> to update the value, like so:&lt;/p>
+&lt;pre>&lt;code class="language-elm">port numberOfSlits : (Int -&amp;gt; msg) -&amp;gt; Sub msg
+&lt;/code>&lt;/pre>
+&lt;p>and I &lt;a href="https://github.com/tekul/elm-slits/blob/4232544c5f5c74734ada4d81667b788c33044c7f/src/Main.elm#L66">added a subscription&lt;/a> to &lt;code>numberOfSlits NumSlits&lt;/code>. The app then receives messages of type &lt;code>NumSlits&lt;/code> and it can update the model accordingly. If Javascript tries to send in something invalid (not of the expected &lt;code>Int&lt;/code> type), then Elm won&amp;rsquo;t let it in and will log an error in the console.
+&lt;a href="javascript:void(0)" onclick="app.ports.numberOfSlits.send(10)">Clicking here&lt;/a>
+should change the number of slits to ten.&lt;/p>
+&lt;p>Elm &amp;ldquo;Flags&amp;rdquo; are also used to pass the desired width and height of the SVG into the application.&lt;/p>
+&lt;h2 id="conclusion">Conclusion&lt;/h2>
+&lt;p>This was a brief overview of my first go at playing with Elm. My Javascript knowledge is rather limited, and I haven&amp;rsquo;t tried out any of its competitors so I can&amp;rsquo;t really draw any conclusions on how Elm compares. It certainly compared favourable with my experience of writing even small programs in Javascript. It allows you to write typed programs, with a similar syntax to Haskell and it limits what can happen in your program, making debugging a lot easier. You can step back through all the events you&amp;rsquo;ve received and inspect the resulting changes in the model. Elm puts you in a cosy little world within your application, where you are completely isolated from nasty runtime errors. That worked out fine for a simple application like this one, but how well it scales up into more complicated applications, I don&amp;rsquo;t know yet. The next thing on my Elm to-do list is to build something that actually talks to a server.&lt;/p>
+&lt;p>Any questions or suggestions, please &lt;a href="https://github.com/tekul/elm-slits/issues">post them on github&lt;/a>.&lt;/p>
+&lt;section class="footnotes" role="doc-endnotes">
+&lt;hr>
+&lt;ol>
+&lt;li id="fn:1" role="doc-endnote">
+&lt;p>When I was a student, my supervisor Sandy Watt wrote physics demo programs including one like this, and my Java code was based on his original version. His programs were written in Basic with embedded ARM code, but these days we can get away with a high-level language like Elm and rendering images with SVG without having to worry about performance.&amp;#160;&lt;a href="#fnref:1" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:2" role="doc-endnote">
+&lt;p>Elm gives us the value of the &lt;a href="https://developer.mozilla.org/en-US/docs/Web/API/MouseEvent/pageY">&lt;code>pageY&lt;/code>&lt;/a> property of the mouse event.&amp;#160;&lt;a href="#fnref:2" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;/ol>
+&lt;/section></description></item><item><title>Linux Setup with XMonad</title><link>https://broch.tech/posts/linux-install/</link><pubDate>Sat, 19 Nov 2016 00:00:00 +0000</pubDate><guid>https://broch.tech/posts/linux-install/</guid><description>&lt;p>Earlier this year, after many years of using OSX, I decided to switch to using Linux for my desktop. Most of the development tools I use work better on Linux &amp;ndash; I mostly work directly with plain-text format files and I use the terminal a lot. I also wanted to use a tiling window manager with a minimal user interface. The changes Apple have been making to their machines and OS over the past few years have been irrelevant to my needs at best, and in some cases are downright annoying. The recent release of laptops with no escape key and yet more connectors (dongle hell) is just confirmation that I made the right choice. I bought a Thinkpad P50 as my work machine &lt;sup id="fnref:1">&lt;a href="#fn:1" class="footnote-ref" role="doc-noteref">1&lt;/a>&lt;/sup>.&lt;/p>
+&lt;p>I&amp;rsquo;d maintained small Linux server installations for many years, and am happy enough setting up postfix or nginx, but I&amp;rsquo;d never really used Linux as a desktop environment. I wanted to use a lightweight XMonad setup rather than a stock distro desktop installation, which meant having to find out about a lot of things that would otherwise be taken care of automatically, but the result is that I have a simpler system and also a better understanding of how it actually works.&lt;/p>
+&lt;p>&lt;img src="xmonad-desktop.jpg" alt="XMonad up and running">&lt;/p>
+&lt;p>This article describes the installation process, things I discovered along the way, and how I got to where I wanted to be (or near enough).&lt;/p>
+&lt;h2 id="install-ubuntu-1604-server">Install Ubuntu 16.04 Server&lt;/h2>
+&lt;p>&lt;em>Update&lt;/em>: Not long after writing this article I switched to using Arch Linux as the base distribution, which I&amp;rsquo;d thoroughly recommend. This is my &lt;a href="arch-packages.txt">current list of installed packages&lt;/a> &lt;sup id="fnref:2">&lt;a href="#fn:2" class="footnote-ref" role="doc-noteref">2&lt;/a>&lt;/sup>. Also, I now build &lt;code>xmonad&lt;/code> and &lt;code>xmobar&lt;/code> as part of my local Haskell development environment rather than installing the distro versions, but aside from that, my setup is still very similar to the one described here.&lt;/p>
+&lt;p>I used an Ubuntu server installation as a starting point. I wanted something reliable to build on which would be maintained long-term, but I didn&amp;rsquo;t want all the unnecessary noise of a full Gnome/Unity setup when I would be running XMonad as the window manager. I might experiment with other Linux distros in future when I&amp;rsquo;m more familiar with my current setup and have been running it for a while.&lt;/p>
+&lt;h2 id="networking">Networking&lt;/h2>
+&lt;p>The installation was done with an ethernet connection and if this is missing on a subsequent boot, the system will hang waiting for the connection to come up &lt;sup id="fnref:3">&lt;a href="#fn:3" class="footnote-ref" role="doc-noteref">3&lt;/a>&lt;/sup>. By default, the static network configuration is read from the file &lt;code>/etc/network/interfaces&lt;/code>, but for a laptop, this isn&amp;rsquo;t ideal, as the available networks may change and you probably want to be able to connect to different WIFI networks depending on where you are. The &lt;code>network-manager&lt;/code> package is a common solution. First comment out everything but the &lt;code>lo&lt;/code> interface in the &lt;code>/etc/network/interfaces&lt;/code> file:&lt;/p>
+&lt;pre>&lt;code class="language-plain"># The loopback network interface
+auto lo
+iface lo inet loopback
+# Commented out because we are using network-manager
+# The primary network interface
+# auto enp0s31f6
+# iface enp0s31f6 inet dhcp
+&lt;/code>&lt;/pre>
+&lt;p>then install the package without the UI parts:&lt;/p>
+&lt;pre>&lt;code class="language-shell-session">$ sudo apt install --no-install-recommends network-manager
+&lt;/code>&lt;/pre>
+&lt;p>In a normal desktop setup, you would just select an available WIFI network from a menu of available connections. The &lt;code>nmcli&lt;/code> command-line tool provides equivalent commands for everything you need to manage connections. NetworkManager will connect automatically to networks in its database when you boot up, so you should only need to interact with it when you are connecting from a new location.&lt;/p>
+&lt;p>To create a DHCP configured ethernet connection&lt;/p>
+&lt;pre>&lt;code class="language-shell-session">$ nmcli connection add conn-name WiredHome type ethernet autoconnect yes
+&lt;/code>&lt;/pre>
+&lt;p>To list available WIFI connections (&amp;lsquo;list&amp;rsquo; is optional)&lt;/p>
+&lt;pre>&lt;code class="language-shell-session">$ nmcli device wifi list
+&lt;/code>&lt;/pre>
+&lt;p>To create a new WIFI connection (creates a new connection each time)&lt;/p>
+&lt;pre>&lt;code class="language-shell-session">$ nmcli device wifi connect &amp;quot;My Favourite Cafe SSID&amp;quot; password thepassword name &amp;quot;Cafe&amp;quot;
+&lt;/code>&lt;/pre>
+&lt;p>To switch WIFI off&lt;/p>
+&lt;pre>&lt;code class="language-shell-session">$ nmcli radio wifi off
+&lt;/code>&lt;/pre>
+&lt;p>To list all known connections&lt;/p>
+&lt;pre>&lt;code class="language-shell-session">$ nmcli connection show
+&lt;/code>&lt;/pre>
+&lt;p>To delete connections&lt;/p>
+&lt;pre>&lt;code class="language-shell-session">$ nmcli connection delete name_or_id
+&lt;/code>&lt;/pre>
+&lt;p>You can also edit or delete existing connections. Connections are stored as files in the &lt;code>/etc/NetworkManager/system-connections&lt;/code> directory. Note that the passwords are stored in plain text in these files. I don&amp;rsquo;t mind this since none of the WIFI connections I use are very secret &lt;sup id="fnref:4">&lt;a href="#fn:4" class="footnote-ref" role="doc-noteref">4&lt;/a>&lt;/sup>.&lt;/p>
+&lt;h2 id="managing-external-disks">Managing External Disks&lt;/h2>
+&lt;p>The &lt;code>udisks2&lt;/code> package seems to be the back-end which most filesystem management tools (e.g. Nautilus) use to deal with hotplugging of USB disks, so I installed this. It comes with a command line program &lt;code>udisksctl&lt;/code>.&lt;/p>
+&lt;p>To list devices&lt;/p>
+&lt;pre>&lt;code class="language-shell-session">$ udisksctl status
+MODEL REVISION SERIAL DEVICE
+-------------------------------------------------
+Databar 5.00 07ABC sda
+&lt;/code>&lt;/pre>
+&lt;p>To find out more about a device&lt;/p>
+&lt;pre>&lt;code class="language-shell-session">$ udisksctl info -b /dev/sda
+&lt;/code>&lt;/pre>
+&lt;p>To mount a filesystem&lt;/p>
+&lt;pre>&lt;code class="language-shell-session">$ udisksctl mount -b /dev/sda1
+&lt;/code>&lt;/pre>
+&lt;p>To unmount it&lt;/p>
+&lt;pre>&lt;code class="language-shell-session">$ udisksctl unmount -b /dev/sda1
+&lt;/code>&lt;/pre>
+&lt;p>To power off the disks&lt;/p>
+&lt;pre>&lt;code class="language-shell-session">$ udisksctl power-off -b /dev/sda
+&lt;/code>&lt;/pre>
+&lt;p>Disks are mounted under &lt;code>/media/&amp;lt;username&amp;gt;/&lt;/code>.&lt;/p>
+&lt;h2 id="key-ring---storing-passwords-securely">Key Ring - Storing Passwords Securely&lt;/h2>
+&lt;p>We don&amp;rsquo;t want lots of email passwords and other secrets lying about in configuration files. A keyring program stores passwords (or other sensitive data) in an encrypted database, encrypted with a master password. The most common seems to be &lt;code>gnome-keyring&lt;/code> which uses the derives a key from the login password to encrypt the data. Fortunately it can be used without pulling in anything else Gnome-related:&lt;/p>
+&lt;pre>&lt;code class="language-shell-session">$ sudo apt install --no-install-recommends gnome-keyring libpam-gnome-keyring
+&lt;/code>&lt;/pre>
+&lt;p>Also install &lt;code>libsecret-tools&lt;/code> which allows access to the keyring using the &lt;code>secret-tool&lt;/code> command.&lt;/p>
+&lt;pre>&lt;code class="language-shell-session">$ sudo apt install libsecret-tools
+&lt;/code>&lt;/pre>
+&lt;p>The installation adds an entry to &lt;code>/etc/pam.d/common-password&lt;/code>, but you need to do some additional configuration if you want to start the keyring daemon when you log in on the console &lt;sup id="fnref:5">&lt;a href="#fn:5" class="footnote-ref" role="doc-noteref">5&lt;/a>&lt;/sup>. I removed the entry and edited the &lt;code>/etc/pam.d/login&lt;/code> and &lt;code>/etc/pam.d/passwd&lt;/code> files as described in the &lt;a href="https://wiki.archlinux.org/index.php/GNOME/Keyring#PAM_method">Arch Linux Wiki&lt;/a> &lt;sup id="fnref:6">&lt;a href="#fn:6" class="footnote-ref" role="doc-noteref">6&lt;/a>&lt;/sup>.&lt;/p>
+&lt;h2 id="email">Email&lt;/h2>
+&lt;p>My email setup is heavily influenced by &lt;a href="https://github.com/pbrisbin/dotfiles">Pat Brisbin&amp;rsquo;s&lt;/a> &lt;sup id="fnref:7">&lt;a href="#fn:7" class="footnote-ref" role="doc-noteref">7&lt;/a>&lt;/sup>. It uses&lt;/p>
+&lt;ul>
+&lt;li>mbsync for syncing gmail over IMAP&lt;/li>
+&lt;li>msmtp for sending emails&lt;/li>
+&lt;li>mutt for reading mails&lt;/li>
+&lt;/ul>
+&lt;p>Passwords for accounts can be added to the keyring using secret tool:&lt;/p>
+&lt;pre>&lt;code class="language-shell-session">$ secret-tool store --label=&amp;quot;Gmail password for myaccount&amp;quot; gmail myaccount
+&lt;/code>&lt;/pre>
+&lt;p>And looked up in &lt;code>.mbsyncrc&lt;/code>:&lt;/p>
+&lt;pre>&lt;code class="language-plain">PassCmd &amp;quot;secret-tool lookup gmail myaccount&amp;quot;
+&lt;/code>&lt;/pre>
+&lt;p>and in &lt;code>.msmtprc&lt;/code> &lt;sup id="fnref:8">&lt;a href="#fn:8" class="footnote-ref" role="doc-noteref">8&lt;/a>&lt;/sup>:&lt;/p>
+&lt;pre>&lt;code class="language-plain">passwordeval secret-tool lookup gmail myaccount | awk 1
+&lt;/code>&lt;/pre>
+&lt;h3 id="mail-address-lookup">Mail Address Lookup&lt;/h3>
+&lt;p>When sending emails, programs will usually be able to lookup addresses either in a system address book or their own custom lists. With mutt, you need to decide how you want to maintain your contacts and tell it how to look them up. You can use a simple alias list, or &lt;a href="https://wiki.archlinux.org/index.php/Mutt#Contact_management">set up an external query command&lt;/a>. I&amp;rsquo;m using &lt;code>abook&lt;/code>, which is a step up from simple aliases but still very basic. You can use it to query addresses and to add them directly from within mutt. I have the following added to my &lt;code>.muttrc&lt;/code> file&lt;/p>
+&lt;pre>&lt;code class="language-plain">set query_command=&amp;quot;abook --mutt-query '%s'&amp;quot;
+macro index,pager a &amp;quot;| abook --add-email\n&amp;quot;
+&lt;/code>&lt;/pre>
+&lt;p>The macro bound to &amp;lsquo;a&amp;rsquo; overrides the default &lt;code>create-alias&lt;/code> command. You can bind it to something else if you want.&lt;/p>
+&lt;h2 id="xwindows-and-xmonad">XWindows and XMonad&lt;/h2>
+&lt;p>One of the reasons for switching systems was to be able to use &lt;a href="http://xmonad.org">XMonad&lt;/a>. A tiling window manager just fits much better with a workflow which mostly involves using an editor and terminals. Indeed, it&amp;rsquo;s hard to see the benefit of having to adjust window positions and sizes manually in any kind of workflow.&lt;/p>
+&lt;p>The required packages:&lt;/p>
+&lt;pre>&lt;code class="language-shell-session">$ sudo apt install xmonad dmenu xmobar xinit rxvt-unicode-256 x11-xserver-utils
+&lt;/code>&lt;/pre>
+&lt;p>Initial login still takes place on the console, which I prefer, but XMonad will be started when you run the &lt;code>startx&lt;/code> command. You can customize the startup process by &lt;a href="https://github.com/tekul/dotfiles/blob/master/xinitrc">writing your own &lt;code>.xinitrc&lt;/code> file&lt;/a> &lt;sup id="fnref:9">&lt;a href="#fn:9" class="footnote-ref" role="doc-noteref">9&lt;/a>&lt;/sup>.&lt;/p>
+&lt;p>I also installed the font packages &lt;code>fonts-inconsolata&lt;/code> for use in the console and &lt;code>fonts-wqy-zenhei&lt;/code> for Chinese support.&lt;/p>
+&lt;p>I didn&amp;rsquo;t need to do much to &lt;a href="https://github.com/tekul/dotfiles/blob/master/xmonad/xmonad.hs">customize XMonad&lt;/a>. I added some key mappings to make the volume control keys work, some shortcut keys, and set &lt;code>urxvt&lt;/code> to be the terminal, but other than that it&amp;rsquo;s a very standard setup &lt;sup id="fnref:10">&lt;a href="#fn:10" class="footnote-ref" role="doc-noteref">10&lt;/a>&lt;/sup>. &lt;code>XMobar&lt;/code> provides a simple menu bar (which I can easily hide whenever I want) and &lt;code>dmenu&lt;/code> makes it easy to run an application by typing its name (it is bound to the &lt;code>Mod-p&lt;/code> key by default and provides text completion in the menu bar area).&lt;/p>
+&lt;h3 id="touchpad-sensitivity">Touchpad Sensitivity&lt;/h3>
+&lt;p>The sensitivity of the touchpad can cause problems because you can accidentally brush against it and change focus while you are tying, either to a different point in the same file or to another window altogether. Needless to say this is very annoying. There are tools such as &lt;code>syndaemon&lt;/code> which disables the touchpad while you are typing and there are also settings to adjust the sensitivity, but I still found this to be an issue so I just disabled the touchpad by adding&lt;/p>
+&lt;pre>&lt;code class="language-plain">synclient TouchPadOff=1
+&lt;/code>&lt;/pre>
+&lt;p>to my &lt;code>.xinitrc&lt;/code> file. I also have a key mapping defined to toggle it on and off if I really want to use it.&lt;/p>
+&lt;h2 id="sound">Sound&lt;/h2>
+&lt;p>I&amp;rsquo;m still learning how the sound system works on Linux, but I installed the following packages&lt;/p>
+&lt;ul>
+&lt;li>&lt;code>alsa-utils&lt;/code> command line utils for setting the volume and so on. Useful for binding to keys in &lt;code>xmonad.hs&lt;/code>&lt;/li>
+&lt;li>&lt;code>sox&lt;/code> to be able to play and record from the command line (this duplicates some functionality in &lt;code>alsa-utils&lt;/code> so may not be needed)&lt;/li>
+&lt;/ul>
+&lt;h2 id="music">Music&lt;/h2>
+&lt;p>I&amp;rsquo;ve always detested iTunes. It&amp;rsquo;s always been a dreadful music player and the only thing I missed when I switched from Windows to OSX was the Winamp music player. For years iTunes didn&amp;rsquo;t even have a simple &amp;ldquo;add to queue&amp;rdquo; feature and it only plays Apple approved file formats. These days its priorities are acting as a front end to the app store and as a file manager for your iPhone (which I don&amp;rsquo;t have).&lt;/p>
+&lt;p>Unsurprisingly there are plenty of music players on Linux. My favourite was &lt;a href="https://cmus.github.io/">&lt;code>cmus&lt;/code>&lt;/a> which is a really nice terminal application with a very simple interface. The only customization I made was to set the colour scheme to &amp;ldquo;zenburn&amp;rdquo;. It&amp;rsquo;s also available on OSX via homebrew, so iTunes is history. Good riddance.&lt;/p>
+&lt;h2 id="image-handling">Image Handling&lt;/h2>
+&lt;h3 id="viewing-and-editing">Viewing and Editing&lt;/h3>
+&lt;p>&lt;a href="https://feh.finalrewind.org/">feh&lt;/a> is a command line tool which displays images in a simple window. It&amp;rsquo;s handy if you&amp;rsquo;re working in the terminal and generating images or graphs which you want to view immediately.&lt;/p>
+&lt;p>&lt;a href="https://www.gimp.org/">Gimp&lt;/a> is an obvious choice if you want to edit images. It as an optional dependency on the package &lt;code>tcpd&lt;/code> which seems unnecessary. I also installed the &lt;code>imagemagick&lt;/code> package which has lots of useful command line tools.&lt;/p>
+&lt;pre>&lt;code class="language-shell-session">$ sudo apt install --no-install-recommends gimp
+$ sudo apt install imagemagick
+&lt;/code>&lt;/pre>
+&lt;p>Gimp 2.8 comes with a single-window mode which works much better with XMonad tiling. This isn&amp;rsquo;t the default, so you need to select it from the &lt;code>Windows&lt;/code> menu or the tool windows will look weird.&lt;/p>
+&lt;h3 id="managing-photo-collections">Managing Photo Collections&lt;/h3>
+&lt;p>Loading and viewing photos is another requirement. My current choice is &lt;code>gThumb&lt;/code> which seems to do everything I need and has fewer dependencies than the other major competitors I looked at.&lt;/p>
+&lt;pre>&lt;code class="language-shell-session">$ sudo apt install --no-install-recommends gthumb
+&lt;/code>&lt;/pre>
+&lt;p>I haven&amp;rsquo;t been able to get it to download images from my phone yet, but I can do so using the command line tool &lt;code>gphoto2&lt;/code>. For example, to download all files from a specific folder I use:&lt;/p>
+&lt;pre>&lt;code class="language-shell-session">$ gphoto2 -f /store_00010001/DCIM/Camera -P
+&lt;/code>&lt;/pre>
+&lt;h2 id="irc-and-instant-messaging">IRC and Instant Messaging&lt;/h2>
+&lt;p>A lot of messaging these days takes place on phones and I&amp;rsquo;m fine with moving that way too, but there&amp;rsquo;s a limit to how much I want to type on a phone. I still spend a lot of time in front of a computer and chat apps are pretty much essential if you collaborate with others remotely. I use Google chat with quite a few people so I needed a replacement for it. &lt;a href="http://www.profanity.im">Profanity&lt;/a> is an XMPP client which seems to work well. It&amp;rsquo;s another simple terminal application, based on the IRC client &lt;a href="https://irssi.org">IRSSI&lt;/a>. IRSSI was also easy to get running with my existing freenode account.&lt;/p>
+&lt;p>I do still have a lot of contacts in Skype but I don&amp;rsquo;t use it as often as I used to and I haven&amp;rsquo;t checked out the Linux version yet.&lt;/p>
+&lt;h2 id="chinese-input-on-linux">Chinese Input on Linux&lt;/h2>
+&lt;p>I&amp;rsquo;ve been learning (and re-learning) Chinese for a long time and the pinyin input method on OSX is very handy for people like me who can pronounce and recognise some characters, but not necessarily write them from memory.&lt;/p>
+&lt;p>The &lt;a href="http://fcitx-im.org/">&lt;code>fcitx&lt;/code>&lt;/a> package seems to be pretty much the standard and I found it easy enough to install and get working.&lt;/p>
+&lt;pre>&lt;code class="language-shell-session">$ sudo apt install fcitx fcitx-pinyin
+&lt;/code>&lt;/pre>
+&lt;p>You can add other input methods as desired, for example:&lt;/p>
+&lt;pre>&lt;code class="language-shell-session">$ sudo apt install fcitx-table-wubi fcitx-sunpinyin fcitx-googlepinyin
+&lt;/code>&lt;/pre>
+&lt;p>and choose which ones are enabled using &lt;code>fcitx-configtool&lt;/code> or by editing the file &lt;code>~/.config/fcitx/profile&lt;/code>.&lt;/p>
+&lt;p>This was enough to get pinyin input working in all applications I tried (and the terminal) apart from Emacs, for which there is a &lt;a href="https://wiki.archlinux.org/index.php/Fcitx#Emacs">specific workaround&lt;/a>.&lt;/p>
+&lt;h3 id="adding-chinese-locale">Adding Chinese Locale&lt;/h3>
+&lt;p>Running &lt;code>locale -a&lt;/code> showed that only English locales were available. To add simplified Chinese run:&lt;/p>
+&lt;pre>&lt;code class="language-shell-session">$ sudo locale-gen zh_CN.UTF-8
+&lt;/code>&lt;/pre>
+&lt;p>You can do this for any of the locales listed in &lt;code>/usr/share/i18n/SUPPORTED&lt;/code>.&lt;/p>
+&lt;p>I have a shortcut in my &lt;code>xmonad.hs&lt;/code> for running emacs. I changed this to set the variable beforehand:&lt;/p>
+&lt;pre>&lt;code class="language-plain">((mod4Mask, xK_s), spawn &amp;quot;LC_CTYPE='zh_CN.UTF8' emacs24-x&amp;quot;)
+&lt;/code>&lt;/pre>
+&lt;p>and &lt;code>fcitx&lt;/code> then works in Emacs too (你看得见吗？). Emacs also has its own Chinese input method support but fcitx seems good enough for me.&lt;/p>
+&lt;h2 id="further-resources">Further Resources&lt;/h2>
+&lt;p>Most of the above was of course pilfered from other sources. Many of the programs I&amp;rsquo;ve mentioned have excellent websites and documentation and I found the &lt;a href="https://wiki.archlinux.org/">Arch Linux Wiki&lt;/a> really useful. Lots of people have also uploaded their configuration files to &lt;a href="https://github.com/">github&lt;/a> and you can easily find relevant material there using github&amp;rsquo;s source search. This is great both for tuning your own files and for finding out about other useful things that people are using &lt;sup id="fnref:11">&lt;a href="#fn:11" class="footnote-ref" role="doc-noteref">11&lt;/a>&lt;/sup>.&lt;/p>
+&lt;h2 id="conclusions">Conclusions&lt;/h2>
+&lt;p>So far, I&amp;rsquo;m pretty happy with my setup. There have been benefits I expected and also some things I like which I hadn&amp;rsquo;t anticipated. I have a simple system with the bare minimum of installed packages to do what I want &amp;ndash; there&amp;rsquo;s none of the extra garbage that vendors feel the need to clutter their latest offerings with to attract attention. I had to learn various new commands to allow me to do things which would normally be done through a UI, but in the long term this is often more efficient. It&amp;rsquo;s certainly no worse than having to remember the different &amp;ldquo;control panel&amp;rdquo; locations and sequences of menu items which a UI layers on top. Using the command line directly strips away this extra obfuscation and the knowledge is more portable than familiarity with different window-based utilities.&lt;/p>
+&lt;p>Working with XMonad is much nicer, particularly for programming, where a tiling window manager comes into its own. It&amp;rsquo;s easy to fire up a terminal next to or below your current window without losing focus of what you were looking at before, whether it&amp;rsquo;s a browser page or something in your editor. Working with multiple desktops and shunting windows between them quickly becomes a normal part of your workflow and there&amp;rsquo;s no clutter taking up screen space unnecessarily. It&amp;rsquo;s all super fast, without distractions such as animations, notification bars and so on. Since I haven&amp;rsquo;t configured &lt;code>mbsync&lt;/code> to pull down mail automatically, I also find that I now prefer to only read email when I choose, so there are no push notifications in the system at all and thus no interruptions when I&amp;rsquo;m working on something.&lt;/p>
+&lt;p>I can&amp;rsquo;t really come up with anything I need that is seriously missing on Linux. Some things, like hotplugging cameras and downloading images is slicker on OSX, but that&amp;rsquo;s more an issue with my minimal setup than Linux in general &amp;ndash; a standard distro installation would probably be better at this kind of thing. OSX has nicer fonts (Chinese sometimes mixes fonts and looks a bit rough in my terminal) but I&amp;rsquo;m still hoping to make improvements on that front.&lt;/p>
+&lt;p>I hope someone finds something useful here. If anyone has any suggestions for things I might be missing, please let me know.&lt;/p>
+&lt;section class="footnotes" role="doc-endnotes">
+&lt;hr>
+&lt;ol>
+&lt;li id="fn:1" role="doc-endnote">
+&lt;p>There&amp;rsquo;s nothing specific to the P50 in this article. It&amp;rsquo;s quite a chunky, powerful machine. It has an Nvidia graphics card as well as the on-board Intel card and this is one area where Linux is a bit of a headache. Support for dual-graphics card laptops on Linux isn&amp;rsquo;t great. The laptop screen runs fine using the Intel card, but there are some display issues if I use an external monitor with it. If I switch to the NVidia card exclusively it works fine but this requires a reboot and a BIOS switch. I haven&amp;rsquo;t tried using NVidia&amp;rsquo;s drivers or optimising the setup for switching between the cards yet. There are tools for this but it seems like a bit of a minefield and I&amp;rsquo;m happy enough with it for now. This will improve in future versions, but if you don&amp;rsquo;t need high-performance graphics then you might be better picking a machine with a single card.&amp;#160;&lt;a href="#fnref:1" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:2" role="doc-endnote">
+&lt;p>My initial motivation for the switch to Arch Linux was to have a system with a newer kernel and &lt;code>xorg&lt;/code> packages (1.19+) which had better support for Nvidia hardware and dual graphics cards. Any concerns I might have had about stability didn&amp;rsquo;t last long. I&amp;rsquo;ve had very few issues and the documentation is great.&amp;#160;&lt;a href="#fnref:2" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:3" role="doc-endnote">
+&lt;p>There is a timeout configured somewhere which I changed the first time I ran into the problem, but I can&amp;rsquo;t find the file anymore. In any case it doesn&amp;rsquo;t matter once the ethernet settings have been removed from &lt;code>/etc/network/interfaces&lt;/code>.&amp;#160;&lt;a href="#fnref:3" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:4" role="doc-endnote">
+&lt;p>NetworkManager can be integrated with gnome keyring, using a &lt;a href="https://developer.gnome.org/NetworkManager/stable/gdbus-org.freedesktop.NetworkManager.SecretAgent.html">&lt;code>SecretAgent&lt;/code>&lt;/a> service. Removing the &lt;code>psk&lt;/code> and setting &lt;code>psk-flags=1&lt;/code> in the connection file means a user secret agent will be asked for the password (see &lt;code>man nm-settings&lt;/code>). The &lt;code>nm-applet&lt;/code> application from the package &lt;code>network-manager-gnome&lt;/code> implements the required service interface. It will ask the user for the password on demand and store it for late use in the keyring. If you don&amp;rsquo;t install this, a workaround is to remove the &lt;code>psk&lt;/code> entry from the connection file and get &lt;code>nmcli&lt;/code> to ask you to enter the password: &lt;code>nmcli --ask connection up Cafe&lt;/code>. I also had a go at &lt;a href="https://github.com/tekul/nm-agent">writing my own SecretAgent&lt;/a> to try out the Haskell &lt;code>dbus&lt;/code> and &lt;code>gnome-keyring&lt;/code> libraries.&amp;#160;&lt;a href="#fnref:4" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:5" role="doc-endnote">
+&lt;p>There is a tool called &lt;code>pam-auth-update&lt;/code> which adds (or removes) the gnome keyring entry automatically. I guess it only adds the password entry since I&amp;rsquo;m using the console rather than a standard gnome setup.&amp;#160;&lt;a href="#fnref:5" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:6" role="doc-endnote">
+&lt;p>Setting the PAM stuff up seems quite temperamental and I had some problems. For example, the keyring daemon would be started but the keyring wouldn&amp;rsquo;t be unlocked on login and I would still be prompted for my password when it was needed. So far, I can also only get &lt;code>secret-tool&lt;/code> to work from within X-Windows.&amp;#160;&lt;a href="#fnref:6" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:7" role="doc-endnote">
+&lt;p>Note that the mutt/email articles in his blog are out of date compared to the current setup.&amp;#160;&lt;a href="#fnref:7" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:8" role="doc-endnote">
+&lt;p>&lt;code>msmtp&lt;/code> is supposed to integrate directly with the keyring but I couldn&amp;rsquo;t get it to work. In any case it makes more sense to share the same keyring entry between the two. The &lt;code>passwordeval&lt;/code> option enables this. It fails without the &lt;code>awk 1&lt;/code>, probably because it doesn&amp;rsquo;t write out the required newline.&amp;#160;&lt;a href="#fnref:8" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:9" role="doc-endnote">
+&lt;p>The default setup sources the files in &lt;code>/etc/X11/Xsession.d&lt;/code> and ends up by running the script &lt;code>/usr/bin/x-session-manager&lt;/code> which starts xmonad. For more information on the startup sequence, see the &lt;code>startx&lt;/code> man page.&amp;#160;&lt;a href="#fnref:9" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:10" role="doc-endnote">
+&lt;p>Details of fonts and other customizations for urxvt can be found in the &lt;a href="https://github.com/tekul/dotfiles/blob/master/Xdefaults">.Xdefaults file&lt;/a>.&amp;#160;&lt;a href="#fnref:10" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:11" role="doc-endnote">
+&lt;p>This is how I found out about &lt;code>cmus&lt;/code>, for example. I think it was &lt;a href="https://github.com/ssh0/dotfiles">in this repo&lt;/a> which also has quite a sophisticated Xmonad setup.&amp;#160;&lt;a href="#fnref:11" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;/ol>
+&lt;/section></description></item><item><title>OAuth2 and OpenID Connect in Haskell</title><link>https://broch.tech/posts/oauth2-openid-connect-haskell/</link><pubDate>Mon, 02 May 2016 00:00:00 +0000</pubDate><guid>https://broch.tech/posts/oauth2-openid-connect-haskell/</guid><description>&lt;p>I&amp;rsquo;ve been working for a while on an implementation of the OpenID Connect specification. Since it was something I already knew quite a bit about from my previous job, it seemed like a good idea for a &amp;ldquo;real-world&amp;rdquo; Haskell project. The result is a project called &amp;ldquo;Broch&amp;rdquo; &lt;sup id="fnref:1">&lt;a href="#fn:1" class="footnote-ref" role="doc-noteref">1&lt;/a>&lt;/sup>, which is an OpenID Connect identity provider. Features include&lt;/p>
+&lt;ul>
+&lt;li>OAuth2 flows
+&lt;ul>
+&lt;li>Authorization endpoint&lt;/li>
+&lt;li>Token endpoint&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>OpenID Connect basic flows&lt;/li>
+&lt;li>OpenID Connect hybrid flows&lt;/li>
+&lt;li>OpenID Connect Discovery&lt;/li>
+&lt;li>Support for signed and encrypted JWTs &lt;sup id="fnref:2">&lt;a href="#fn:2" class="footnote-ref" role="doc-noteref">2&lt;/a>&lt;/sup>&lt;/li>
+&lt;li>&lt;a href="http://openid.net/specs/openid-connect-registration-1_0.html">Client Registration&lt;/a>&lt;/li>
+&lt;li>Client authentication
+&lt;ul>
+&lt;li>Basic authentication with client secret&lt;/li>
+&lt;li>&lt;a href="https://tools.ietf.org/html/draft-ietf-oauth-jwt-bearer-12">JWT Bearer authentication&lt;/a>&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>ID Tokens (signed and/or encrypted)&lt;/li>
+&lt;li>&lt;a href="http://openid.net/specs/openid-connect-core-1_0.html#SubjectIDTypes">Pairwise subject identifiers&lt;/a>&lt;/li>
+&lt;li>Server key management and rotation &lt;sup id="fnref:3">&lt;a href="#fn:3" class="footnote-ref" role="doc-noteref">3&lt;/a>&lt;/sup>&lt;/li>
+&lt;li>SQLite back end&lt;/li>
+&lt;li>PostgreSQL 9.5 back end&lt;/li>
+&lt;/ul>
+&lt;p>You can easily get a prototype server up and running with default settings and it&amp;rsquo;s intended that the important features should be easily customized. This article is mostly an introduction to the project and the Haskell implementation. If you don&amp;rsquo;t know much about OAuth2 or OpenID Connect but are still interested, you should probably check out the &lt;a href="http://openid.net/connect/faq/">OpenID Connect FAQ&lt;/a> first to get an overview.&lt;/p>
+&lt;h2 id="the-command-line-executable">The Command Line Executable&lt;/h2>
+&lt;p>In addition to the main library, the project build creates a &lt;code>broch&lt;/code> executable which can be used to get up and running quickly. Instructions for building and running against a SQLite or PostgreSQL database can be found in the project &lt;a href="https://github.com/tekul/broch/blob/master/README.md">readme file&lt;/a>. The &lt;a href="https://github.com/tekul/broch/blob/master/broch-server/broch.hs">source code&lt;/a> is also a useful reference for building your own server application from scratch.&lt;/p>
+&lt;h2 id="coding-a-minimal-server">Coding a Minimal Server&lt;/h2>
+&lt;p>In many cases, you will want to write a customized server of your own. To do this, you create a configuration instance (&lt;code>Broch.Server.Config&lt;/code>) and pass it to the &lt;code>brochServer&lt;/code> function. The only things you &lt;em>have&lt;/em> to supply are&lt;/p>
+&lt;ul>
+&lt;li>An &amp;ldquo;issuer&amp;rdquo; for the OpenID Provider. This is the external URL used to access your server, for example &lt;code>https://myopenidserver.com&lt;/code>.&lt;/li>
+&lt;li>A &lt;code>Broch.Server.Config.KeyRing&lt;/code> instance to provide the signing and encryption keys for the server. The &lt;code>defaultKeyRing&lt;/code> function can be used for this.&lt;/li>
+&lt;li>A function to render an &amp;ldquo;approval&amp;rdquo; page, which allows the user to consent to the authorization request.&lt;/li>
+&lt;li>A function to authenticate (or reauthenticate) a user.&lt;/li>
+&lt;li>A function to provide the identity of the currently authenticated user.&lt;/li>
+&lt;li>A means of supplying user information for OpenID authentication requests.&lt;/li>
+&lt;/ul>
+&lt;p>Some standard options for authentication and user management are provided &amp;ndash; you just need to select them in your configuration. Everything else in a simple test server can use default settings, in-memory storage and provided login handlers.&lt;/p>
+&lt;p>The configured server uses WAI and can be run using the warp web server:&lt;/p>
+&lt;pre>&lt;code class="language-haskell">{-# LANGUAGE OverloadedStrings #-}
+import Data.Default.Generics (def)
+import qualified Data.Text as T
+import Network.Wai.Middleware.RequestLogger (logStdoutDev)
+import Network.Wai.Handler.Warp
+import Web.Routing.TextRouting
+import Broch.Model (Client(..), GrantType(..), Scope(..), UserInfo(..))
+import Broch.Server.Config
+import Broch.Server (brochServer, authenticatedSubject, authenticateSubject, defaultLoginPage, defaultApprovalPage, passwordLoginHandler)
+import Broch.Server.Internal (routerToApp, text, invalidateSession)
+import Broch.Server.Session (defaultKey, defaultLoadSession)
+import Broch.URI (parseURI)
+main :: IO ()
+main = do
+sessionEncryptionKey &amp;lt;- defaultKey
+opKeys &amp;lt;- defaultKeyRing
+inMemory &amp;lt;- inMemoryConfig &amp;quot;http://localhost:3000&amp;quot; opKeys Nothing
+let config = inMemory { authenticateResourceOwner = authenticate, getUserInfo = loadUserInfo }
+createClient config testClient
+let extraRoutes =
+[ (&amp;quot;/home&amp;quot;, text &amp;quot;Hello, I'm the home page&amp;quot;)
+, (&amp;quot;/login&amp;quot;, passwordLoginHandler defaultLoginPage authenticate)
+, (&amp;quot;/logout&amp;quot;, invalidateSession &amp;gt;&amp;gt; text &amp;quot;You have been logged out&amp;quot;)
+]
+routingTable = foldl (\tree (r, h) -&amp;gt; addToRoutingTree r h tree) (brochServer config defaultApprovalPage authenticatedSubject authenticateSubject) extraRoutes
+waiApp = routerToApp (defaultLoadSession 3600 sessionEncryptionKey) (issuerUrl config) routingTable
+run 3000 $ logStdoutDev waiApp
+where
+Right uri = parseURI &amp;quot;http://c123.client&amp;quot;
+testClient = def
+{ clientId = &amp;quot;123&amp;quot;
+, clientSecret = Just &amp;quot;abc123&amp;quot;
+, authorizedGrantTypes = [AuthorizationCode]
+, redirectURIs = [uri]
+, allowedScope = [OpenID]
+}
+authenticate username password
+| username == password = return (Just username)
+| otherwise = return Nothing
+loadUserInfo uid _ = return . Just $ def
+{ sub = uid
+, email = Just (T.concat [uid, &amp;quot;@someplace.com&amp;quot;])
+}
+&lt;/code>&lt;/pre>
+&lt;p>The web code is similar to that in &lt;a href="http://broch.tech/posts/build-your-own-wai-framework/">an earlier article on WAI&lt;/a>, but includes the concept of a session, since users have to be able to authenticate to the authorization server. The &lt;code>brochServer&lt;/code> function converts the configuration into a routing table, mapping URL paths to web handler functions and we add extra handlers for login/logout processing also to render a very basic home page. The &lt;a href="hackage.haskell.org/package/reroute">reroute&lt;/a> package is used to build the routing table. The table is then converted into a WAI &lt;code>Application&lt;/code> which we can run.&lt;/p>
+&lt;p>We&amp;rsquo;ve added a single client which is allowed to use the authorization code flow and will use basic authentication (the default) at the token endpoint.&lt;/p>
+&lt;p>Neither OAuth2 nor OpenID Connect define how authentication of the end user should take place at the authorization server, so user account data and authentication are decoupled from the core OpenID/OAuth2 functionality. Here we have used an authentication function which merely compares the username and password for equality, so there aren&amp;rsquo;t actually any user accounts &amp;ndash; you can authenticate with any name. For &amp;ldquo;user info&amp;rdquo; requests, we&amp;rsquo;ve just added a function &lt;code>loadUserInfo&lt;/code> to make up the data. In a real implementation, you would have a specific user data type and would write functions to manage user accounts and convert the data to the claims returned for a user info request &lt;sup id="fnref:4">&lt;a href="#fn:4" class="footnote-ref" role="doc-noteref">4&lt;/a>&lt;/sup>. A side project is an implementation based on the SCIM specification &lt;sup id="fnref:5">&lt;a href="#fn:5" class="footnote-ref" role="doc-noteref">5&lt;/a>&lt;/sup>.&lt;/p>
+&lt;h3 id="database-backend">Database Backend&lt;/h3>
+&lt;p>To add persistent storage, there are SQLite and PostgreSQL backs end available, which are built on top of the &lt;code>sqlite-simple&lt;/code> and &lt;code>postresql-simple&lt;/code> packages. These are used in the &lt;a href="https://github.com/tekul/broch/blob/master/broch-server/broch.hs">command-line source&lt;/a> which you can examine along with the project readme for more details. We could swap from in-memory to using Postgres just by changing the configuration to&lt;/p>
+&lt;pre>&lt;code class="language-haskell">config &amp;lt;- postgreSQLBackend pool &amp;lt;$&amp;gt; inMemoryConfig issuer opKeys Nothing
+&lt;/code>&lt;/pre>
+&lt;p>where &lt;code>pool&lt;/code> is a &lt;code>Data.Pool&lt;/code> of Postgres &lt;code>Connection&lt;/code> instances. The project has some SQL scripts for setting up the Postgres database schema. It requires Postgres 9.5 or later. The SQLite backend creates the schema as required.&lt;/p>
+&lt;h2 id="authorization-code-flow-walk-through">Authorization Code Flow Walk-Through&lt;/h2>
+&lt;p>Using the server above, we can work through a typical flow which a client application would use to authenticate a user. We&amp;rsquo;ll use &lt;code>curl&lt;/code> to take the place of the client. All URLs would use HTTPS in a production system.&lt;/p>
+&lt;p>The first step is a redirection from the client to the authorization server, which creates the &lt;a href="http://localhost:3000/oauth/authorize?client_id=123&amp;amp;state=982147&amp;amp;response_type=code&amp;amp;redirect_uri=http%3A%2F%2Fc123.client">following request&lt;/a> &lt;sup id="fnref:6">&lt;a href="#fn:6" class="footnote-ref" role="doc-noteref">6&lt;/a>&lt;/sup>:&lt;/p>
+&lt;pre>&lt;code class="language-plain">http://localhost:3000/oauth/authorize?client_id=123&amp;amp;state=982147&amp;amp;response_type=code&amp;amp;scope=openid&amp;amp;redirect_uri=http%3A%2F%2Fc123.client
+&lt;/code>&lt;/pre>
+&lt;p>The user will be asked to log in (if they aren&amp;rsquo;t already authenticated to the authorization server), and then to approve the request for &lt;code>openid&lt;/code> scope. Once this is granted, the authorization server redirects back to the client application, with an authorization code:&lt;/p>
+&lt;pre>&lt;code class="language-plain">http://c123.client/?state=982147&amp;amp;code=14581d956c81535c&amp;amp;scope=openid
+&lt;/code>&lt;/pre>
+&lt;p>The client then exchanges the code at the token endpoint for an &lt;code>access_token&lt;/code> and an &lt;code>id_token&lt;/code>, which are returned in a JSON response:&lt;/p>
+&lt;pre>&lt;code class="language-shell-session">$ curl -u 123:abc123 -H &amp;quot;Accept: application/json&amp;quot; -X POST -d code=14581d956c81535c -d client_id=123 -d redirect_uri=http://c123.client -d grant_type=authorization_code http://localhost:3000/oauth/token
+{&amp;quot;expires_in&amp;quot;:3600,&amp;quot;access_token&amp;quot;:&amp;quot;eyJhbGciOiJSU0EtT0FFUCIsImtpZCI6IjIwMTUtMDUtMTlUMjA6MjI6MjUuMTc2MjY1MDAwMDAwWiIsImVuYyI6IkExMjhHQ00ifQ.bESkEA-0vGBhnftPuRLYcxvZuD6xbdTrp4h34zBxsn0AhNgXxAOsMsvC-14YijuMBAU4SxkMsBoxL4P4vEWODGrVwK8xb0_OogyxsrCSRYiYwYopU3xli9k3Dw_LpP0vFC60r1oGGsGexeKsAYy9BwL5kGeTNt9GtnjI2Q-WnrA.oZvgWxUtv4-RNddd.xcaT8kydCGN4Oe_JH5QvFTxsE9YJMJ976b1PEAkHvjHj2xcEM1pE_3MCsEGOV7tSho6omNCJFZC_AiKfP2s4QBLvXxG9kMON7OIIjrx4FKDuTAoZgtl-4aiQ_mt-ppt2lVf0pr03cYTvoBzJK85ofMnNeLsnrjA3oGB-xGxXSG5ZKkyutNo.X4ncv5rOTTBOE6hdclpWYg&amp;quot;,&amp;quot;token_type&amp;quot;:&amp;quot;bearer&amp;quot;,&amp;quot;id_token&amp;quot;:&amp;quot;eyJhbGciOiJSUzI1NiIsImtpZCI6IjIwMTUtMDUtMTlUMjA6MjI6MjQuMTc2MjY1MDAwMDAwWiJ9.eyJzdWIiOiJjYXQiLCJleHAiOjE0MzIxMzkxMDgsImlzcyI6Imh0dHA6Ly9sb2NhbGhvc3Q6MzAwMCIsImlhdCI6MTQzMjEzODEwOCwiYXV0aF90aW1lIjoxNDMyMTM3MTY5LCJhdWQiOlsiMTIzIl19.f_EJI-wiDT1oa0Cta12yco73BurkYTCR-yrxl3k5zsYO7wNrHc9y2QE-ahmkdsiHdlzCZ4roF7_fVXRMHL2JNsC3S6oyeWfO6E-8sjsTFBRvkDSOCbYwm7HnYW-VWZ1e2M8g_RgZb4SVzW4OK55QntRvlwW6Aj6Tu_AN6Dg7Ua4&amp;quot;}
+&lt;/code>&lt;/pre>
+&lt;p>The &lt;code>id_token&lt;/code> is defined by the spec to be a JWT. In this implementation, access tokens are also JWTs by default.&lt;/p>
+&lt;p>The client can then use the access token to request more information about the user:&lt;/p>
+&lt;pre>&lt;code class="language-shell-session">$ TOKEN=eyJhbGciOiJSU0EtT0FFUCIsImtpZCI6IjIwMTUtMDUtMTlUMjA6MjI6MjUuMTc2MjY1MDAwMDAwWiIsImVuYyI6IkExMjhHQ00ifQ.bESkEA-0vGBhnftPuRLYcxvZuD6xbdTrp4h34zBxsn0AhNgXxAOsMsvC-14YijuMBAU4SxkMsBoxL4P4vEWODGrVwK8xb0_OogyxsrCSRYiYwYopU3xli9k3Dw_LpP0vFC60r1oGGsGexeKsAYy9BwL5kGeTNt9GtnjI2Q-WnrA.oZvgWxUtv4-RNddd.xcaT8kydCGN4Oe_JH5QvFTxsE9YJMJ976b1PEAkHvjHj2xcEM1pE_3MCsEGOV7tSho6omNCJFZC_AiKfP2s4QBLvXxG9kMON7OIIjrx4FKDuTAoZgtl-4aiQ_mt-ppt2lVf0pr03cYTvoBzJK85ofMnNeLsnrjA3oGB-xGxXSG5ZKkyutNo.X4ncv5rOTTBOE6hdclpWYg
+$ curl -H &amp;quot;Accept: application/json&amp;quot; -H &amp;quot;Authorization: Bearer $TOKEN&amp;quot; http://localhost:3000/connect/userinfo
+{&amp;quot;email&amp;quot;:&amp;quot;cat@someplace.com&amp;quot;,&amp;quot;sub&amp;quot;:&amp;quot;cat&amp;quot;}
+&lt;/code>&lt;/pre>
+&lt;h2 id="configuration">Configuration&lt;/h2>
+&lt;p>One of the design issues I had trouble with was the how best to build a configurable server application. It&amp;rsquo;s easy enough to come up with intelligent defaults for an OpenID Provider, but pretty much all the functionality needs to be pluggable &lt;sup id="fnref:7">&lt;a href="#fn:7" class="footnote-ref" role="doc-noteref">7&lt;/a>&lt;/sup>. The &lt;code>Broch.Server.Config&lt;/code> module contains data structures for settings which are used to initialize a server, and also functions which define pluggable behaviour&lt;/p>
+&lt;pre>&lt;code class="language-haskell">data Config m s = Config
+{ issuerUrl :: Text
+, keyRing :: KeyRing m
+, responseTypesSupported :: [ResponseType]
+, algorithmsSupported :: SupportedAlgorithms
+, clientAuthMethodsSupported :: [ClientAuthMethod]
+, claimsSupported :: [Text]
+, createClient :: CreateClient m
+, getClient :: LoadClient m
+, createAuthorization :: CreateAuthorization m s
+, getAuthorization :: LoadAuthorization m
+, authenticateResourceOwner :: AuthenticateResourceOwner m
+, createApproval :: CreateApproval m
+, getApproval :: LoadApproval m
+, createAccessToken :: CreateAccessToken m
+, decodeAccessToken :: DecodeAccessToken m
+, decodeRefreshToken :: DecodeRefreshToken m
+, getUserInfo :: LoadUserInfo m
+}
+&lt;/code>&lt;/pre>
+&lt;p>The functions are type aliases, for example&lt;/p>
+&lt;pre>&lt;code class="language-haskell">type LoadClient m = ClientId -&amp;gt; m (Maybe Client)
+&lt;/code>&lt;/pre>
+&lt;p>The implementations can then be written in any way, as long as they end up satisfying the required type. They can use partial application, for example, to pass other dependencies such as connection pools.&lt;/p>
+&lt;h2 id="the-server">The Server&lt;/h2>
+&lt;p>The &lt;code>brochServer&lt;/code> function used above is in the &lt;a href="https://github.com/tekul/broch/blob/master/Broch/Server.hs">&lt;code>Broch.Server&lt;/code>&lt;/a> module, which also contains most of the web handler code. This is where everything is plugged together to create the server and is thus the most useful source for understanding how the implementation works. It also contains the default functions for authentication and the user interface, which we used above.&lt;/p>
+&lt;p>Most of the work for processing authorization and token requests is decoupled from the HTTP interface (WAI) and the code is in separate modules. The web handlers extract the request data, bundle the parameters up in a map, then delegate the detailed work to other functions. This makes it easier to test the core functionality and to use it with a different web front-end.&lt;/p>
+&lt;h3 id="authorization-endpoint">Authorization Endpoint&lt;/h3>
+&lt;p>The result of an authorization request can be one of&lt;/p>
+&lt;ul>
+&lt;li>A redirect containing the authorization information (an authorization code, access token or whatever other data is required by the grant request)&lt;/li>
+&lt;li>A redirect to enable user authentication, before continuing processing the original authorization request&lt;/li>
+&lt;li>An error returned to the user agent, due to a potentially malicious client request&lt;/li>
+&lt;li>A redirect error, where the error information is returned to the client in the URL.&lt;/li>
+&lt;/ul>
+&lt;p>The authorization web handler authenticates the user and then delegates to the function &lt;a href="https://github.com/tekul/broch/blob/master/Broch/OAuth2/Authorize.hs">&lt;code>processAuthorizationRequest&lt;/code>&lt;/a>.&lt;/p>
+&lt;h3 id="token-endpoint">Token Endpoint&lt;/h3>
+&lt;p>The token endpoint authenticates the client and then calls the function &lt;a href="https://github.com/tekul/broch/blob/master/Broch/OAuth2/Token.hs">&lt;code>processTokenRequest&lt;/code>&lt;/a>, return a JSON response as defined in the specification. This can be either a token response or an error response.&lt;/p>
+&lt;h3 id="dynamic-registration">Dynamic Registration&lt;/h3>
+&lt;p>The server can optionally support &lt;a href="http://openid.net/specs/openid-connect-registration-1_0.html">client registration&lt;/a>.&lt;/p>
+&lt;h3 id="discovery">Discovery&lt;/h3>
+&lt;p>The discovery endpoint just provides a well-known location for clients to obtain a copy of the server&amp;rsquo;s configuration and supported features, such as the algorithms which can be used for encoding JWTs and the URLs of the other endpoints. The information is published at the standard URL path &lt;code>/.well-known/openid-configuration&lt;/code>.&lt;/p>
+&lt;h3 id="userinfo">UserInfo&lt;/h3>
+&lt;p>A client can optionally retrieve user details from the &amp;ldquo;user info&amp;rdquo; endpoint by submitting the access token which was issued by the authorization server. This isn&amp;rsquo;t strictly necessary, as OpenID Connect also isssues an ID token which asserts the identity of the authenticated user and this may contain enough information, depending on the client&amp;rsquo;s requirements.&lt;/p>
+&lt;h3 id="front-end">Front End&lt;/h3>
+&lt;p>The UI requirements are minimal and will usually consist of&lt;/p>
+&lt;ul>
+&lt;li>A login page of some kind, unless the authorization server uses some authentication mechanism which doesn&amp;rsquo;t require one.&lt;/li>
+&lt;li>A page to obtain the user&amp;rsquo;s approval for the information requested by the client.&lt;/li>
+&lt;/ul>
+&lt;p>Default implementations are provided for both of these. The login page is used with the &lt;code>passwordLoginHandler&lt;/code> and is a plain Blaze &lt;code>Html&lt;/code> page. User approval is a function which takes the approval data and returns an &lt;code>Html&lt;/code> page. The command-line server will also serve up static content from a configured directory, which can be used to provide CSS and image files for the UI.&lt;/p>
+&lt;h3 id="client-authentication">Client Authentication&lt;/h3>
+&lt;p>OAuth2 only mentions client authentication using a password/secret, either using a Basic authorization header or passing the credentials in the request body. Providers are also free to accept other forms of authentication.&lt;/p>
+&lt;p>OpenID Connect explicitly defines the &lt;a href="http://openid.net/specs/openid-connect-core-1_0.html#ClientAuthentication">client authentication methods&lt;/a> which it supports. All of these are available in this implementation.&lt;/p>
+&lt;h3 id="key-rotation">Key Rotation&lt;/h3>
+&lt;p>The server&amp;rsquo;s public keys can be obtained from the &lt;code>jwks_uri&lt;/code> endpoint (which is returned in the server discovery data). It contains all the public keys which a client might need to validate server signatures and to encrypt data to send to the server.&lt;/p>
+&lt;p>The rotation of &lt;a href="http://openid.net/specs/openid-connect-core-1_0.html#RotateSigKeys">signing&lt;/a> and &lt;a href="http://openid.net/specs/openid-connect-core-1_0.html#RotateEncKeys">encryption&lt;/a> keys is also covered in the spec. The &lt;code>KeyRing&lt;/code> data type stores two active key pairs &amp;ndash; one for signing and one for encryption. It also has a function to rotate the keys, expiring the previous active keys and generating news ones. Unless the keys need to be invalidated immediately (for security reasons, for example), the expired signing keys will still be available from the &lt;code>jwks_uri&lt;/code> endpoint for a configurable grace period, so that tokens created with earlier signing keys will still validate. The server will also retain decryption private keys internally for the grace period.&lt;/p>
+&lt;h2 id="developing-in-haskell">Developing in Haskell&lt;/h2>
+&lt;p>The project has been a good learning experience and I&amp;rsquo;ve found Haskell to be particularly suitable for working to a complicated specification like OAuth2/OpenID Connect. The different errors and outcomes of a request can be modelled nicely using algebraic data types and using the &lt;code>Either&lt;/code> type allows us to deal with all the error conditions defined by the spec while keeping IO errors (for example, data access errors) completely separate. As an example, the return type for &lt;code>processAuthorizationRequest&lt;/code> is&lt;/p>
+&lt;pre>&lt;code class="language-haskell">m (Either AuthorizationRequestError URI)
+&lt;/code>&lt;/pre>
+&lt;p>The code runs in an arbitrary monad and thus does not contain any IO code. In practice &lt;code>m&lt;/code> will be a &lt;code>MonadIO&lt;/code> instance, since the functions for loading clients and so on will need to make calls to a database. Any IO errors should be returned as &lt;code>500&lt;/code> responses but in the absence of these, we know from the type that the outcome of a call to the function will be either an &lt;code>AuthorizationRequestError&lt;/code> or a URI which we should redirect to &lt;sup id="fnref:8">&lt;a href="#fn:8" class="footnote-ref" role="doc-noteref">8&lt;/a>&lt;/sup>.&lt;/p>
+&lt;p>&lt;code>AuthorizationRequestError&lt;/code> is a data type which captures the cases where the request will &amp;ldquo;short-circuit&amp;rdquo;:&lt;/p>
+&lt;ul>
+&lt;li>The client shows potentially malicious behaviour which should be reported to the end user.&lt;/li>
+&lt;li>The client has submitted an otherwise invalid request, which should be reported to it via a redirect.&lt;/li>
+&lt;li>The user needs to re-authenticate. This typically happens when the client requires that the previous login took place within a certain period.&lt;/li>
+&lt;/ul>
+&lt;p>The actual data type is:&lt;/p>
+&lt;pre>&lt;code class="language-haskell">data AuthorizationRequestError
+= MaliciousClient EvilClientError
+| RequiresAuthentication
+| ClientRedirectError URI
+&lt;/code>&lt;/pre>
+&lt;p>In deciding how to respond to the request, the handler code needs to pattern-match on the types and we can&amp;rsquo;t, for example, redirect the user to a malicious client by accident. The compiler will also generally warn if we forget to match on one of the options, which forces us to deal with all the cases. In future, the &lt;a href="http://openid.net/specs/oauth-v2-form-post-response-mode-1_0.html">OAuth2 Form Post&lt;/a> spec will also be implemented, which would again modify the return type, probably changing the successful outcome from a simple redirect to either a redirect or a form post. The compiler would immediately point this out to calling code, making it difficult to call the function without also dealing with this case.&lt;/p>
+&lt;p>This was a recurring theme &amp;ndash; data types written to match the specification would in turn drive the development and ensure that all the corner cases had been dealt with.&lt;/p>
+&lt;h2 id="future-work">Future Work&lt;/h2>
+&lt;p>Broch implements most of the features for an OpenID Connect Provider required by the certification programme &lt;sup id="fnref:9">&lt;a href="#fn:9" class="footnote-ref" role="doc-noteref">9&lt;/a>&lt;/sup>. Work on additional features is ongoing. The current aim is to develop an opinionated but customizable solution for authentication based on OpenID Connect, rather than an identity management solution which does &lt;em>everything&lt;/em>. Even so, a production-ready solution requires a lot more than simple spec conformance. Suggestions for future development and also improvements to the current code are welcome.&lt;/p>
+&lt;section class="footnotes" role="doc-endnotes">
+&lt;hr>
+&lt;ol>
+&lt;li id="fn:1" role="doc-endnote">
+&lt;p>This follows from the contrived acronym &amp;ldquo;Basic Realization of OpenID Connect in Haskell&amp;rdquo;, but I chose the name first and the acronym later. If someone can think of a better one, please let me know. Brochs are tall, round iron age buildings and I enjoyed playing in the ruins of some of them when I was young. They are of simple design, solidly engineered and secure. All good goals for an identity management system to aspire to, even an implementation of OAuth2/OpenID Connect.&amp;#160;&lt;a href="#fnref:1" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:2" role="doc-endnote">
+&lt;p>JWTs are implemented in a separate project &lt;a href="http://hackage.haskell.org/package/jose-jwt">&lt;code>jose-jwt&lt;/code>&lt;/a>.&amp;#160;&lt;a href="#fnref:2" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:3" role="doc-endnote">
+&lt;p>Key rotation is described in the &lt;a href="http://openid.net/specs/openid-connect-core-1_0.html#RotateSigKeys">&lt;code>openid-connect-core&lt;/code>&lt;/a> spec.&amp;#160;&lt;a href="#fnref:3" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:4" role="doc-endnote">
+&lt;p>OpenID Connect defines a specific set of &lt;a href="http://openid.net/specs/openid-connect-core-1_0.html#Claims">claims&lt;/a>, which unfortunately aren&amp;rsquo;t directly compatible with SCIM.&amp;#160;&lt;a href="#fnref:4" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:5" role="doc-endnote">
+&lt;p>The aim is to build a full implementation of &lt;a href="http://www.simplecloud.info/">the SCIM 2 spec&lt;/a>, but this is a work in progress, and SCIM may be overkill for many use cases.&amp;#160;&lt;a href="#fnref:5" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:6" role="doc-endnote">
+&lt;p>See the &lt;a href="http://openid.net/specs/openid-connect-core-1_0.html#CodeFlowSteps">spec&lt;/a> for a more in-depth description. The only thing that will usually vary in this request is the &lt;code>state&lt;/code> parameter which is generated by the client.&amp;#160;&lt;a href="#fnref:6" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:7" role="doc-endnote">
+&lt;p>Functional programmers enjoy making fun of other languages and their inadequacies in this department (just mention &amp;ldquo;dependency injection&amp;rdquo; and watch the reaction), but concrete examples of how to build a Haskell server with a pluggable configuration are thin on the ground. For a beginner it&amp;rsquo;s not clear where to start. If you&amp;rsquo;re using a framework like Yesod, then it uses typeclasses to implement different functionality you might want in your application, and you can override specific functions if you wish. However, I&amp;rsquo;d already decided I didn&amp;rsquo;t want to tie the project to any specific framework and I wasn&amp;rsquo;t overly keen on using typeclasses for everything. The approach I settled on was inspired by this &lt;a href="http://stackoverflow.com/a/14329487/241990">Stack Overflow answer&lt;/a>.&amp;#160;&lt;a href="#fnref:7" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:8" role="doc-endnote">
+&lt;p>The spec actually says that 500 errors should be returned as a redirect to the client, but that can be handled by a single catch in the handler code.&amp;#160;&lt;a href="#fnref:8" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:9" role="doc-endnote">
+&lt;p>A deployed server has been tested successfully against the certification suite. Some optional features aren&amp;rsquo;t implemented yet. More information on certification can be found on the &lt;a href="http://openid.net/certification/">OpenID site&lt;/a>.&amp;#160;&lt;a href="#fnref:9" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;/ol>
+&lt;/section></description></item><item><title>Build Your Own Haskell Web Framework on WAI</title><link>https://broch.tech/posts/build-your-own-wai-framework/</link><pubDate>Sun, 19 Apr 2015 00:00:00 +0000</pubDate><guid>https://broch.tech/posts/build-your-own-wai-framework/</guid><description>&lt;p>This article shows how you can build on top of the basic request/response handling functionality provided by &lt;a href="http://hackage.haskell.org/package/wai">WAI&lt;/a> and the &lt;a href="http://hackage.haskell.org/package/warp">Warp server&lt;/a>, to support some of the requirements you might have in a typical web application. The content is mostly gleaned from my research into the code of several WAI-based web frameworks to try to understand how they work. Building a web application was one of the things I tackled when I didn&amp;rsquo;t really know Haskell well enough, so hopefully this will be useful if you&amp;rsquo;re at a similar stage and would like to understand what&amp;rsquo;s going on in a bit more depth. I&amp;rsquo;ll outline some of the features these frameworks add, build a similar (but simplified) implementation, and also provide links to the source code of some real-world frameworks built on WAI (such as &lt;a href="http://hackage.haskell.org/package/scotty">Scotty&lt;/a>, &lt;a href="http://www.spock.li/">Spock&lt;/a> and &lt;a href="http://www.yesodweb.com/">Yesod&lt;/a>) for comparison.&lt;/p>
+&lt;p>Whether you need to use an additional framework on top of WAI will very much depend on your requirements, how complicated your application is and whether you want to track the extra dependencies in your project. Frameworks cater for general cases (making the types more complex for a beginner) and they have a lot of features. You should certainly try out something like Spock or Scotty as they are easy to get started with. For a simple application, or one where you need finer control over handling requests, you might then consider a customized approach. On the other hand, you might overlook something important which the framework authors didn&amp;rsquo;t &lt;sup id="fnref:1">&lt;a href="#fn:1" class="footnote-ref" role="doc-noteref">1&lt;/a>&lt;/sup> &amp;ndash; the code in this article is only meant to be a rough outline. If you &lt;em>do&lt;/em> decide to &amp;ldquo;build your own,&amp;rdquo; please think hard before releasing it to Hackage. There are more than enough WAI frameworks out there already &lt;sup id="fnref:2">&lt;a href="#fn:2" class="footnote-ref" role="doc-noteref">2&lt;/a>&lt;/sup>.&lt;/p>
+&lt;h3 id="basic-wai">Basic WAI&lt;/h3>
+&lt;p>WAI (&amp;ldquo;web application interface&amp;rdquo;) is a Haskell HTTP request/response API. Theoretically it is server-agnostic but in practice it is really only implemented by the warp server.&lt;/p>
+&lt;p>Request handling in WAI is defined by the &lt;code>Application&lt;/code> type &lt;sup id="fnref:3">&lt;a href="#fn:3" class="footnote-ref" role="doc-noteref">3&lt;/a>&lt;/sup> :&lt;/p>
+&lt;pre>&lt;code class="language-haskell">type Application = Request -&amp;gt; (Response -&amp;gt; IO ResponseReceived) -&amp;gt; IO ResponseReceived
+&lt;/code>&lt;/pre>
+&lt;p>The &lt;a href="http://hackage.haskell.org/package/wai-3.0.2.1/docs/Network-Wai-Internal.html#t:Request">&lt;code>Request&lt;/code>&lt;/a> gives access to the request headers, query string, request body and so on, while the &lt;code>Response -&amp;gt; IO ResponseReceived&lt;/code> callback allows us to send a response we have created. A typical WAI example you might come across will show how to send a simple response:&lt;/p>
+&lt;pre>&lt;code class="language-haskell">{-# LANGUAGE OverloadedStrings #-}
+import Network.HTTP.Types (status200)
+import Network.Wai
+import Network.Wai.Handler.Warp (run)
+app :: Application
+app _ respond = respond $
+responseLBS status200 [(&amp;quot;Content-Type&amp;quot;, &amp;quot;text/plain&amp;quot;)] &amp;quot;hello&amp;quot;
+main = run 3000 app
+&lt;/code>&lt;/pre>
+&lt;p>So from a web developer&amp;rsquo;s perspective, a WAI application is a single function which is called for each request and sends back a response. The code runs in the IO monad and there&amp;rsquo;s no out-of-the-box support for performing redirects, cookie handling, managing sessions or supporting different response types such as text, HTML or JSON. Web frameworks like Scotty and Yesod build these features on top of WAI using their own custom handler monads, meaning you won&amp;rsquo;t usually call the WAI functions directly in your code. Frameworks also provide some kind of routing DSL, usually based on the request path and method (GET, POST etc.), so you can map different requests to different handler functions.&lt;/p>
+&lt;h3 id="the-handler-monad">The Handler Monad&lt;/h3>
+&lt;p>The handler monad provides convenient (read-only) access to the request (headers, parameters) and also provides functions to build the response. This is typically achieved using a combination of &lt;code>ReaderT&lt;/code> and &lt;code>StateT&lt;/code> monad transformers &lt;sup id="fnref:4">&lt;a href="#fn:4" class="footnote-ref" role="doc-noteref">4&lt;/a>&lt;/sup> &lt;sup id="fnref:5">&lt;a href="#fn:5" class="footnote-ref" role="doc-noteref">5&lt;/a>&lt;/sup>. So we could start with something like&lt;/p>
+&lt;pre>&lt;code class="language-haskell">{-# LANGUAGE OverloadedStrings #-}
+import Control.Monad.Reader
+import Control.Monad.State
+import Data.Map.Strict (Map)
+import Data.Text (Text)
+import qualified Data.ByteString.Lazy as BL
+import Network.HTTP.Types (ResponseHeaders, Status)
+import Network.Wai (Request)
+type Params = Map Text [Text]
+data RequestData = RequestData
+{ waiReq :: Request
+, queryParams :: Params
+, postParams :: Params
+}
+data ResponseState = ResponseState
+{ resStatus :: Status
+, resHeaders :: ResponseHeaders
+, content :: BL.ByteString
+}
+type Handler a = ReaderT RequestData (StateT ResponseState IO) a
+&lt;/code>&lt;/pre>
+&lt;p>&lt;code>RequestData&lt;/code> provides access to the original WAI request as well as the parsed request parameters and is accessed via the reader monad. &lt;code>ResponseState&lt;/code> stores the status code, headers and response content. Here we&amp;rsquo;re assuming the only requirement is to handle simple content we can create as a &lt;code>ByteString&lt;/code>, so we&amp;rsquo;re forgetting about streaming responses or serving up files directly. Similarly we&amp;rsquo;re ignoring file uploads in the request data &lt;sup id="fnref:6">&lt;a href="#fn:6" class="footnote-ref" role="doc-noteref">6&lt;/a>&lt;/sup>.&lt;/p>
+&lt;h3 id="routing">Routing&lt;/h3>
+&lt;p>Our application will consist of request handler functions written in the &lt;code>Handler&lt;/code> monad. We also need some way of mapping different requests to the correct handlers. Frameworks generally include a DSL to do this, often using Sinatra-style verb/path combinations, including support for capturing URL parameters and converting parameters to specific types.&lt;/p>
+&lt;p>A very simple routing option is to just pattern match on the &lt;code>pathInfo&lt;/code> property of the WAI &lt;code>Request&lt;/code>, which is of type &lt;code>[Text]&lt;/code>:&lt;/p>
+&lt;pre>&lt;code class="language-haskell">type Router = [Text] -&amp;gt; Handler ()
+&lt;/code>&lt;/pre>
+&lt;p>We can then build our application as a simple routing table:&lt;/p>
+&lt;pre>&lt;code class="language-haskell">myAppRouter :: Router
+myAppRouter path = case path of
+[&amp;quot;home&amp;quot;] -&amp;gt; myHomePageHandler
+[&amp;quot;login&amp;quot;] -&amp;gt; loginHandler
+[&amp;quot;logout&amp;quot;] -&amp;gt; logoutHandler
+[&amp;quot;user&amp;quot;, u] -&amp;gt; userHandler u
+_ -&amp;gt; notFound
+&lt;/code>&lt;/pre>
+&lt;p>For a given request, the router will give us a corresponding handler which we can run. The type is &lt;code>Handler ()&lt;/code> since the handler doesn&amp;rsquo;t return anything. The &lt;code>ResponseState&lt;/code> retrieved from the State monad gives us all we need to send the response. This isn&amp;rsquo;t a very flexible approach, but it&amp;rsquo;s very easy to understand and fine as a first option if we don&amp;rsquo;t need to be able to compose routers and so on. You can find routing packages on Hackage but that&amp;rsquo;s a topic for another time.&lt;/p>
+&lt;h3 id="running-the-handler">Running the Handler&lt;/h3>
+&lt;p>What does it actually mean to run the handler? Before we look at the code, we need to make some minor changes to the &lt;code>Handler&lt;/code> type to support short-circuiting.&lt;/p>
+&lt;h4 id="short-circuiting-in-the-handler-monad">Short-Circuiting in the Handler Monad&lt;/h4>
+&lt;p>In a web application, if we redirect to a different URL, we generally want the response to complete at that point. For example, if we have a request which requires an authenticated user, we might redirect them to a login page if they haven&amp;rsquo;t logged in, but if they&amp;rsquo;re already authenticated, we&amp;rsquo;d want the handler code to proceed.
+Another obvious short-circuiting case is when something goes wrong during execution and we want to immediately send an error response.
+If the monad doesn&amp;rsquo;t short-circuit, then the only alternative is to use nested &lt;code>if/else&lt;/code> or &lt;code>case&lt;/code> statements to control which code is executed &lt;sup id="fnref:7">&lt;a href="#fn:7" class="footnote-ref" role="doc-noteref">7&lt;/a>&lt;/sup>.&lt;/p>
+&lt;p>You might also want the monad to short-circuit whenever you write the response content. In &amp;ldquo;real world&amp;rdquo; frameworks the behaviour varies so you need to know how each of them work &lt;sup id="fnref:8">&lt;a href="#fn:8" class="footnote-ref" role="doc-noteref">8&lt;/a>&lt;/sup>.&lt;/p>
+&lt;p>So how do we make our monad short-circuit? One option is to add the &lt;code>EitherT&lt;/code> monad transformer to our existing monad. If you&amp;rsquo;re not familiar with &lt;code>EitherT&lt;/code>, the behaviour is analogous to the familiar &lt;code>Either&lt;/code> type &lt;sup id="fnref:9">&lt;a href="#fn:9" class="footnote-ref" role="doc-noteref">9&lt;/a>&lt;/sup>. If we call &lt;a href="http://hackage.haskell.org/package/either-4.3.2/docs/Control-Monad-Trans-Either.html#v:left">&lt;code>left&lt;/code>&lt;/a> (or equivalently &lt;code>throwError&lt;/code> since &lt;code>EitherT&lt;/code> is a &lt;code>MonadError&lt;/code> instance), the monad will short-circuit &lt;sup id="fnref:10">&lt;a href="#fn:10" class="footnote-ref" role="doc-noteref">10&lt;/a>&lt;/sup>.&lt;/p>
+&lt;pre>&lt;code class="language-haskell">data HandlerResult = Redirect ByteString -- Redirect to a URL
+| ResponseComplete -- Send the response
+| HandlerError ByteString -- Send an internal error response
+deriving (Show, Eq)
+type Handler a = EitherT HandlerResult (ReaderT RequestData (StateT ResponseState IO)) a
+&lt;/code>&lt;/pre>
+&lt;p>When we call &lt;code>runEitherT&lt;/code> followed by &lt;code>runReaderT&lt;/code> and &lt;code>runStateT&lt;/code>, the result is of type &lt;code>IO (Either HandlerResult (), ResponseState)&lt;/code>.&lt;/p>
+&lt;h4 id="the-runhandler-function">The &lt;code>runHandler&lt;/code> Function&lt;/h4>
+&lt;p>As things stand now, we have a WAI &lt;code>Request&lt;/code> object passed as an argument to the &lt;code>Application&lt;/code> type. To process it, we lookup the handler in our &lt;code>Router&lt;/code> and then:&lt;/p>
+&lt;ul>
+&lt;li>Create a &lt;code>RequestData&lt;/code> from the &lt;code>Request&lt;/code>&lt;/li>
+&lt;li>Create an initial &lt;code>ResponseState&lt;/code>&lt;/li>
+&lt;li>Run the hander to get back the &lt;code>Either HandlerExcept ()&lt;/code> result and the final &lt;code>ResponseState&lt;/code>&lt;/li>
+&lt;/ul>
+&lt;p>The complete &lt;code>runHandler&lt;/code> function looks like this:&lt;/p>
+&lt;pre>&lt;code class="language-haskell">import Network.Wai.Parse
+runHandler :: Request -&amp;gt; Handler () -&amp;gt; IO Response
+runHandler req h = do
+(pParams, _) &amp;lt;- parseRequestBody lbsBackEnd req
+let initRes = ResponseState status200 [] &amp;quot;&amp;quot;
+rd = RequestData
+{ waiReq = req
+, queryParams = toMap $ fmap (\(n, v) -&amp;gt; (n, fromMaybe &amp;quot;&amp;quot; $ v)) $ queryString req
+, postParams = toMap pParams
+}
+(result, res) &amp;lt;- runStateT (runReaderT (runEitherT h) rd) initRes
+let hdrs = resHeaders res
+return $ case result of
+Left ResponseComplete -&amp;gt; responseLBS (resStatus res) hdrs (content res)
+Left (Redirect url) -&amp;gt; responseLBS status302 ((hLocation, url) : hdrs) &amp;quot;&amp;quot;
+Left (HandlerError msg) -&amp;gt; responseLBS internalServerError500 hdrs (BL.fromStrict msg)
+Right _ -&amp;gt; error &amp;quot;Not handled&amp;quot;
+toMap :: [(ByteString, ByteString)] -&amp;gt; Params
+toMap = M.unionsWith (++) . map (\(x, y) -&amp;gt; M.singleton (TE.decodeUtf8 x) [TE.decodeUtf8 y])
+&lt;/code>&lt;/pre>
+&lt;p>The function &lt;a href="https://github.com/yesodweb/wai/blob/wai-extra/3.0.3/wai-extra/Network/Wai/Parse.hs#L174">&lt;code>parseRequestBody&lt;/code>&lt;/a> is part of the &lt;a href="http://hackage.haskell.org/package/wai-extra">&lt;code>wai-extra&lt;/code>&lt;/a> library. It attempts to parse the request body as &lt;a href="http://www.w3.org/TR/html401/interact/forms.html#h-17.13.4">HTML Form data&lt;/a>, returning a tuple containing a list of submitted parameters and a list of uploaded files. Since we aren&amp;rsquo;t supporting file uploads we ignore the second element of the tuple. If the request &lt;code>content-type&lt;/code> is neither &lt;code>application/x-www-form-urlencoded&lt;/code> nor &lt;code>multipart/form-data&lt;/code>, then both these arrays will be empty and we need to read and parse the request body ourselves. We&amp;rsquo;ll look at this below.&lt;/p>
+&lt;p>Note that we&amp;rsquo;re taking the approach that &lt;em>all&lt;/em> responses should short-circuit and assume it&amp;rsquo;s a programmer error if the handler doesn&amp;rsquo;t redirect, write a response or return an error message. This might be confusing if you&amp;rsquo;re used to the &lt;code>Left&lt;/code> constructor of &lt;code>Either&lt;/code> being the &amp;ldquo;error&amp;rdquo; case, but it&amp;rsquo;s really just the case that short-circuits &lt;sup id="fnref:11">&lt;a href="#fn:11" class="footnote-ref" role="doc-noteref">11&lt;/a>&lt;/sup>.&lt;/p>
+&lt;h3 id="functions-in-the-handler-monad">Functions in the Handler Monad&lt;/h3>
+&lt;p>The handler monad is not very useful by itself. We want to hide the details behind a convenient API for reading request properties and creating the response. We&amp;rsquo;ll look at some simple examples, but you can obviously write whatever functions best suit your needs.&lt;/p>
+&lt;h4 id="reading-the-request">Reading the request&lt;/h4>
+&lt;p>When processing a request, we typically want to read parameters and/or the request body. Most frameworks do not differentiate between different types of request parameters, but let&amp;rsquo;s suppose we want to treat request body parameters separately from query string parameters &lt;sup id="fnref:12">&lt;a href="#fn:12" class="footnote-ref" role="doc-noteref">12&lt;/a>&lt;/sup>. We&amp;rsquo;ll also assume that it&amp;rsquo;s an error to send duplicate values of the same parameter:&lt;/p>
+&lt;pre>&lt;code class="language-haskell">postParam :: Text -&amp;gt; Handler Text
+postParam name = asks postParams &amp;gt;&amp;gt;= lookupParam name
+queryParam :: Text -&amp;gt; Handler Text
+queryParam name = asks queryParams &amp;gt;&amp;gt;= lookupParam name
+lookupParam :: Text -&amp;gt; Params -&amp;gt; Handler Text
+lookupParam name params = case M.lookup name params of
+Just [v] -&amp;gt; return v
+_ -&amp;gt; throwError $ HandlerError $ B.concat [&amp;quot;Missing or duplicate parameter&amp;quot;, TE.encodeUtf8 name]
+&lt;/code>&lt;/pre>
+&lt;p>WAI&amp;rsquo;s &lt;code>Request&lt;/code> record type has a field called &lt;code>requestBody&lt;/code> which is of type &lt;code>IO ByteString&lt;/code>. It produces the complete body a chunk at a time, returning an empty &lt;code>ByteString&lt;/code> when the body is completely consumed. There&amp;rsquo;s also a convenience function to do this, which we can wrap to create our &lt;code>body&lt;/code> function:&lt;/p>
+&lt;pre>&lt;code class="language-haskell">body :: Handler BL.ByteString
+body = asks waiReq &amp;gt;&amp;gt;= liftIO . strictRequestBody
+&lt;/code>&lt;/pre>
+&lt;p>Note that the body can only be read once. It may already have been read by the function &lt;code>parseRequestBody&lt;/code> which we used above and in that case, the &lt;code>body&lt;/code> function would return an empty value &lt;sup id="fnref:13">&lt;a href="#fn:13" class="footnote-ref" role="doc-noteref">13&lt;/a>&lt;/sup>.&lt;/p>
+&lt;h4 id="building-the-response">Building the response&lt;/h4>
+&lt;p>For the response, we&amp;rsquo;ll start by writing functions to:&lt;/p>
+&lt;ul>
+&lt;li>redirect to another URL&lt;/li>
+&lt;li>set the status&lt;/li>
+&lt;li>set the content as text, JSON, HTML&lt;/li>
+&lt;/ul>
+&lt;p>The redirect function just takes a URL as a &lt;code>ByteString&lt;/code> and short-circuits with the corresponding &lt;code>HandlerResult&lt;/code> value:&lt;/p>
+&lt;pre>&lt;code class="language-haskell">redirect :: ByteString -&amp;gt; Handler a
+redirect = throwError . Redirect
+&lt;/code>&lt;/pre>
+&lt;p>The &lt;code>runHandler&lt;/code> function we wrote above does the rest of the work, setting the status code to 302 and the &lt;code>Location&lt;/code> header to the supplied URL.&lt;/p>
+&lt;p>Setting the response status to a different value is easily done by changing the state:&lt;/p>
+&lt;pre>&lt;code class="language-haskell">status :: Status -&amp;gt; Handler ()
+status s = modify $ \rs -&amp;gt; rs { resStatus = s }
+&lt;/code>&lt;/pre>
+&lt;p>and we can write the response content as text, JSON or (Blaze) HTML using the following functions:&lt;/p>
+&lt;pre>&lt;code class="language-haskell">import Data.Aeson
+import Text.Blaze.Html (Html)
+import Text.Blaze.Html.Renderer.Utf8 (renderHtml)
+text :: Text -&amp;gt; Handler ()
+text t = setContentType &amp;quot;text/plain; charset=utf-8&amp;quot; &amp;gt;&amp;gt; (rawBytes . BL.fromStrict $ TE.encodeUtf8 t)
+json :: ToJSON a =&amp;gt; a -&amp;gt; Handler ()
+json j = setContentType &amp;quot;application/json&amp;quot; &amp;gt;&amp;gt; rawBytes (encode j)
+html :: Html -&amp;gt; Handler ()
+html h = setContentType &amp;quot;text/html; charset=utf-8&amp;quot; &amp;gt;&amp;gt; rawBytes (renderHtml h)
+rawBytes :: BL.ByteString -&amp;gt; Handler ()
+rawBytes b = modify (\rs -&amp;gt; rs { content = b }) &amp;gt;&amp;gt; throwError ResponseComplete
+setHeader :: HeaderName -&amp;gt; ByteString -&amp;gt; Handler ()
+setHeader name value = modify $ \rs -&amp;gt; rs { resHeaders = (name, value) : resHeaders rs }
+setContentType :: ByteString -&amp;gt; Handler ()
+setContentType = setHeader &amp;quot;Content-Type&amp;quot;
+&lt;/code>&lt;/pre>
+&lt;h2 id="exception-handling">Exception Handling&lt;/h2>
+&lt;p>So far we&amp;rsquo;ve assumed that every &lt;code>Handler&lt;/code> will produce a value of type &lt;code>Either HandlerResult ()&lt;/code>, but what happens if the code throws an exception instead? We can test this easily by just adding the following route to our &lt;code>myAppRouter&lt;/code> above:&lt;/p>
+&lt;pre>&lt;code class="language-haskell">[&amp;quot;eek&amp;quot;] -&amp;gt; error &amp;quot;eek!&amp;quot;
+&lt;/code>&lt;/pre>
+&lt;p>Requesting the URL &lt;code>/eek&lt;/code> from a browser returns the text response &amp;ldquo;Something went wrong&amp;rdquo; with a 500 response code. This is the default response produced by Warp&amp;rsquo;s internal error handler and it is easily customized &lt;sup id="fnref:14">&lt;a href="#fn:14" class="footnote-ref" role="doc-noteref">14&lt;/a>&lt;/sup>. Alternatively we can catch the exception ourselves. We still need a function to convert our router into an &lt;code>Application&lt;/code>, so we can do it there:&lt;/p>
+&lt;pre>&lt;code class="language-haskell">routerToApplication :: Router -&amp;gt; Application
+routerToApplication route req respond =
+(runHandler req $ route pathInfo req)
+`catch` λ(e :: SomeException) -&amp;gt; return $ responseLBS internalServerError500 [] $ &amp;quot;Internal error&amp;quot;
+&lt;/code>&lt;/pre>
+&lt;h2 id="conclusion">Conclusion&lt;/h2>
+&lt;p>Even though WAI is not really a standard web interface supported by multiple servers, it &lt;em>is&lt;/em> common to multiple frameworks so an understanding WAI and Warp is useful if you are likely to be developing Haskell web applications.&lt;/p>
+&lt;p>In this article we&amp;rsquo;ve built a simple set of functions with which we can write web handlers which would look quite similar to those of a framework like Scotty, and you should now hopefully have a clearer idea of how they work. The code is available from the accompanying samples repository &lt;a href="https://github.com/broch/brochio-samples/blob/byowai/ByoWai.hs">on github&lt;/a>, on the &lt;code>byowai&lt;/code> branch. The branch commit history closely follows the structure of the article and should compile at each stage. For a more complex example, you can also see this kind of code in use in a project I&amp;rsquo;ve been working on which is an implementation of the &lt;a href="http://openid.net/developers/specs/">OpenID Connect specification&lt;/a> in Haskell &lt;sup id="fnref:15">&lt;a href="#fn:15" class="footnote-ref" role="doc-noteref">15&lt;/a>&lt;/sup>. I&amp;rsquo;ll hopefully find time to write up more articles on this topic as the development proceeds.&lt;/p>
+&lt;section class="footnotes" role="doc-endnotes">
+&lt;hr>
+&lt;ol>
+&lt;li id="fn:1" role="doc-endnote">
+&lt;p>Warp doesn&amp;rsquo;t automatically limit the request size, for example, so someone can crash your application by sending a very large request. For example, you can use the curl command &lt;code>curl -v --data-urlencode 'username@my_giant_file.txt' localhost:3000/login&lt;/code> to send a large file as a parameter. See also, Yesod&amp;rsquo;s &lt;code>maximumContentLength&lt;/code> setting, which it uses to &lt;a href="https://github.com/yesodweb/yesod/blob/yesod-core/1.4.6/yesod-core/Yesod/Core/Internal/Request.hs#L55">limit the request body size&lt;/a>.&amp;#160;&lt;a href="#fnref:1" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:2" role="doc-endnote">
+&lt;p>&lt;a href="http://hackage.haskell.org/package/scotty">Scotty&lt;/a>, &lt;a href="http://www.yesodweb.com/">Yesod&lt;/a>, &lt;a href="http://hackage.haskell.org/package/hails">Hails&lt;/a>, &lt;a href="http://hackage.haskell.org/package/apiary">Apiary&lt;/a>, &lt;a href="http://www.spock.li/">Spock&lt;/a>, &lt;a href="http://hackage.haskell.org/package/Wheb">Wheb&lt;/a>, &lt;a href="http://hackage.haskell.org/package/simple">Simple&lt;/a>. For a more complete list, you can look through &lt;a href="http://packdeps.haskellers.com/reverse/warp">Warp&amp;rsquo;s reverse dependencies&lt;/a>.&amp;#160;&lt;a href="#fnref:2" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:3" role="doc-endnote">
+&lt;p>For a good overview of WAI, see the &lt;a href="http://www.yesodweb.com/book-1.4/web-application-interface">Yesod Book&lt;/a>.&amp;#160;&lt;a href="#fnref:3" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:4" role="doc-endnote">
+&lt;p>The &lt;a href="https://hackage.haskell.org/package/mtl-2.1.2/docs/Control-Monad-RWS-Strict.html#g:2">RWST&lt;/a> monad transformer is another possibility and is used by the &lt;a href="https://github.com/agrafix/Spock/blob/0.7.5.1/src/Web/Spock/Internal/Wire.hs#L89">Spock Framework&lt;/a>. In this case the &amp;ldquo;writer&amp;rdquo; part of the monad is ignored.&amp;#160;&lt;a href="#fnref:4" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:5" role="doc-endnote">
+&lt;p>For an example which builds its own monad from scratch, see Apiary&amp;rsquo;s &lt;a href="http://hackage.haskell.org/package/apiary-1.2.0/docs/src/Control-Monad-Apiary-Action-Internal.html#ActionT">&lt;code>ActionT&lt;/code>&lt;/a> or Simple&amp;rsquo;s &lt;a href="https://github.com/alevy/simple/blob/v0.9.0.0/simple/src/Web/Simple/Controller/Trans.hs#L51">&lt;code>ControllerT&lt;/code>&lt;/a>.&amp;#160;&lt;a href="#fnref:5" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:6" role="doc-endnote">
+&lt;p>You&amp;rsquo;ll see these extra request and response data options in Scotty&amp;rsquo;s &lt;a href="https://github.com/scotty-web/scotty/blob/0.9.0/Web/Scotty/Internal/Types.hs#L108">&lt;code>ActionEnv&lt;/code> and &lt;code>Content&lt;/code>&lt;/a> types, for example.&amp;#160;&lt;a href="#fnref:6" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:7" role="doc-endnote">
+&lt;p>If we look at the type signatures for the &lt;code>redirect&lt;/code> functions in existing frameworks, the handler monad is parameterized with an arbitrary type. In Scotty, for example, the type is &lt;code>redirect :: Text -&amp;gt; ActionM a&lt;/code> so we can immediately deduce that &lt;code>redirect&lt;/code> &lt;em>must&lt;/em> short-circuit since it can&amp;rsquo;t return an arbitrary value.&amp;#160;&lt;a href="#fnref:7" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:8" role="doc-endnote">
+&lt;p>Scotty &lt;a href="https://github.com/scotty-web/scotty/blob/0.9.0/Web/Scotty/Action.hs#L273">doesn&amp;rsquo;t complete the response&lt;/a> when you write the content using a function like &lt;code>text&lt;/code> or &lt;code>json&lt;/code> whereas &lt;a href="https://github.com/agrafix/Spock/blob/0.7.5.1/src/Web/Spock/Internal/CoreAction.hs#L210">Spock does&lt;/a>. A list of Yesod handler functions which short-circuit can be found in the &lt;a href="http://www.yesodweb.com/book-1.4/routing-and-handlers">Routing and Handlers&lt;/a> chapter of the Yesod book.&amp;#160;&lt;a href="#fnref:8" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:9" role="doc-endnote">
+&lt;p>&lt;code>EitherT&lt;/code> can be found in the &lt;a href="http://hackage.haskell.org/package/either">&lt;code>either&lt;/code>&lt;/a> package and is also re-exported by the &lt;code>errors&lt;/code> package.&amp;#160;&lt;a href="#fnref:9" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:10" role="doc-endnote">
+&lt;p>You may notice that &lt;code>ExceptT&lt;/code> is &lt;a href="https://github.com/scotty-web/scotty/blob/master/Web/Scotty/Internal/Types.hs#L137">used in practice&lt;/a> instead of &lt;code>EitherT&lt;/code>. However, this requires version 2.2.1 or later of the &lt;code>mtl&lt;/code> library, which in turn requires the use of &lt;code>transformers 0.4.*&lt;/code>. GHC 7.8 comes with transformers 0.3 so you can end up with conflicting versions in your project if it depends on GHC and cabal will complain. &lt;code>EitherT&lt;/code> does the same job, more or less, so we stick with that for now.&amp;#160;&lt;a href="#fnref:10" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:11" role="doc-endnote">
+&lt;p>It&amp;rsquo;s also confusing that the naming conventions often reinforce this. For example, Scotty&amp;rsquo;s &lt;a href="https://github.com/scotty-web/scotty/blob/0.9.0/Web/Scotty/Internal/Types.hs#L76">&lt;code>ActionError&lt;/code>&lt;/a> type deals with both redirects and errors.&amp;#160;&lt;a href="#fnref:11" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:12" role="doc-endnote">
+&lt;p>For example, we might want to report an error if sensitive data like a password is sent in a URL. We couldn&amp;rsquo;t do this using Scotty&amp;rsquo;s &lt;code>param&lt;/code> function, for instance.&amp;#160;&lt;a href="#fnref:12" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:13" role="doc-endnote">
+&lt;p>Scotty &lt;a href="https://github.com/scotty-web/scotty/blob/0.9.0/Web/Scotty/Route.hs#L137">reads the request body&lt;/a> and stores it along with the other request data so that it can be accessed more than once.&amp;#160;&lt;a href="#fnref:13" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:14" role="doc-endnote">
+&lt;p>The &lt;a href="http://hackage.haskell.org/package/warp-3.0.5/docs/Network-Wai-Handler-Warp.html#v:setOnExceptionResponse">&lt;code>setOnExceptionResponse&lt;/code>&lt;/a> setting can be used for customization. The exception is caught and the response sent in the &lt;a href="https://github.com/yesodweb/wai/blob/warp/3.0.5/warp/Network/Wai/Handler/Warp/Run.hs#L282">&lt;code>serveConnection&lt;/code>&lt;/a> function. The exception is then re-thrown to the &lt;code>fork&lt;/code> function which &lt;a href="https://github.com/yesodweb/wai/blob/warp/3.0.5/warp/Network/Wai/Handler/Warp/Run.hs#L256">calls the exception handler&lt;/a> configured with &lt;a href="http://hackage.haskell.org/package/warp-3.0.5/docs/Network-Wai-Handler-Warp.html#v:setOnException">&lt;code>setOnException&lt;/code>&lt;/a> and cleans up resources.&amp;#160;&lt;a href="#fnref:14" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:15" role="doc-endnote">
+&lt;p>The project is also on &lt;a href="https://github.com/tekul/broch">github&lt;/a>. It&amp;rsquo;s a work in progress but also includes session handling, for example.&amp;#160;&lt;a href="#fnref:15" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;/ol>
+&lt;/section></description></item></channel></rss>

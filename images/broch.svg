@@ -1,0 +1,28 @@
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg width="5cm" height="5cm" viewBox="0 0 1250 1250"
+     xmlns="http://www.w3.org/2000/svg" version="1.1">
+  <title>Broch Logo</title>
+  <path d="M 50 550
+           a500,500 0 0,1 500, -500
+           l 145 0
+           a500,500 0 0,1 500, 500
+           l 0 100
+           a500,500 0 0,1 -500, 500
+           l 0 -130
+           a370,370 0 0,0 370, -370
+           m 0 -100
+           a370,370 0 0,0 -370 -370
+           l -145 0
+           a370,370 0 0,0 -370 370
+           m 0 100
+           a370,370 0 0,0 370 370
+           l 0 130
+           a500,500 0 0,1 -500, -500
+           l 0 -100
+          "
+
+        stroke-width="55" stroke="black" fill="none" />
+
+</svg>

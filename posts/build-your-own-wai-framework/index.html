@@ -1,0 +1,295 @@
+<!doctype html><html lang=en>
+<head>
+<title>Build Your Own Haskell Web Framework on WAI</title>
+<meta http-equiv=content-type content="text/html" charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<meta name=description content="Investigating the design of WAI-based Haskell web frameworks.">
+<link rel=stylesheet href="/css/main.min.9f61d89855d8bb3b8b3d01deb7e971226ba56b7dc56d61ee90a1ba26253a02be.css" integrity="sha256-n2HYmFXYuzuLPQHet+lxImula33FbWHukKG6JiU6Ar4=">
+<link rel=icon type=image/svg+xml href=/images/broch.svg>
+<link rel=stylesheet href=https://rsms.me/inter/inter.css>
+<script src=/js/prism.js></script>
+</head>
+<body>
+<nav class="bg-white mb-1 shadow">
+<div class="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
+<div class="relative flex justify-between h-20">
+<div class="absolute inset-y-0 left-0 flex items-center sm:hidden">
+<button id=menu-button type=button class="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-red-600" aria-controls=mobile-menu aria-expanded=false>
+<span class=sr-only>Open main menu</span><svg id="open-menu-icon" class="block h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentcolor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg><svg id="close-menu-icon" class="hidden h-6 w-6" xmlns="htp://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentcolor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18 18 6M6 6l12 12"/></svg>
+</button>
+</div>
+<div class="flex-1 flex items-center justify-center sm:items-stretch sm:justify-start">
+<div class="flex-shrink-0 flex items-center">
+<a href=/>
+<img class="hidden lg:block h-14 w-auto" src=/images/broch-logo-text.svg alt=Broch>
+<img class="block lg:hidden h-14 w-auto" src=/images/broch.svg alt=Broch>
+</a>
+</div>
+<div class="hidden sm:ml-9 sm:flex sm:space-x-8">
+<a class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-lg font-medium" href=/ title>Home</a>
+<a class="border-red-600 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-lg font-medium" href=/posts/ title=Blog>Blog</a>
+</div>
+</div>
+<div class="absolute inset-y-0 right-0 flex items-center pr-2 sm:static sm:inset-auto sm:ml-6 sm:pr-0">
+<a href=/index.xml class="bg-white p-1 rounded-full text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+<span class=sr-only>RSS Feed</span><svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentcolor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 5c7.18.0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z"/></svg>
+</a>
+</dev>
+</div>
+</div>
+<div class=hidden id=mobile-menu>
+<div class="pt-2 pb-4 space-y-1">
+<a class="border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700 block pl-3 pr-4 py-2 border-l-4 text-base font-medium" href=/ title>Home</a>
+<a class="bg-red-50 border-red-600 text-red-900 block pl-3 pr-4 py-2 border-l-4 text-base font-medium" href=/posts/ title=Blog>Blog</a>
+</div>
+</div>
+</nav>
+<script>var menu_open=!1,menu_button=document.getElementById("menu-button"),menu=document.getElementById("mobile-menu"),open_icon=document.getElementById("open-menu-icon"),close_icon=document.getElementById("close-menu-icon");menu_button.addEventListener("click",function(){menu_open=!menu_open,menu_open?(menu.className="block sm:hidden",close_icon.className.baseVal="block h-6 w-6",open_icon.className.baseVal="hidden h-6 w-6"):(menu.className="hidden",open_icon.className.baseVal="block h-6 w-6",close_icon.className.baseVal="hidden h-6 w-6")})</script>
+<div class="w-full max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
+<main>
+<article class="mx-auto prose prose-lg">
+<h1>Build Your Own Haskell Web Framework on WAI</h1>
+<p class="block flex display-between text-gray-500 italic">
+April 19, 2015
+</p>
+<p>This article shows how you can build on top of the basic request/response handling functionality provided by <a href=http://hackage.haskell.org/package/wai>WAI</a> and the <a href=http://hackage.haskell.org/package/warp>Warp server</a>, to support some of the requirements you might have in a typical web application. The content is mostly gleaned from my research into the code of several WAI-based web frameworks to try to understand how they work. Building a web application was one of the things I tackled when I didn&rsquo;t really know Haskell well enough, so hopefully this will be useful if you&rsquo;re at a similar stage and would like to understand what&rsquo;s going on in a bit more depth. I&rsquo;ll outline some of the features these frameworks add, build a similar (but simplified) implementation, and also provide links to the source code of some real-world frameworks built on WAI (such as <a href=http://hackage.haskell.org/package/scotty>Scotty</a>, <a href=http://www.spock.li/>Spock</a> and <a href=http://www.yesodweb.com/>Yesod</a>) for comparison.</p>
+<p>Whether you need to use an additional framework on top of WAI will very much depend on your requirements, how complicated your application is and whether you want to track the extra dependencies in your project. Frameworks cater for general cases (making the types more complex for a beginner) and they have a lot of features. You should certainly try out something like Spock or Scotty as they are easy to get started with. For a simple application, or one where you need finer control over handling requests, you might then consider a customized approach. On the other hand, you might overlook something important which the framework authors didn&rsquo;t <sup id=fnref:1><a href=#fn:1 class=footnote-ref role=doc-noteref>1</a></sup> &ndash; the code in this article is only meant to be a rough outline. If you <em>do</em> decide to &ldquo;build your own,&rdquo; please think hard before releasing it to Hackage. There are more than enough WAI frameworks out there already <sup id=fnref:2><a href=#fn:2 class=footnote-ref role=doc-noteref>2</a></sup>.</p>
+<h3 id=basic-wai>Basic WAI</h3>
+<p>WAI (&ldquo;web application interface&rdquo;) is a Haskell HTTP request/response API. Theoretically it is server-agnostic but in practice it is really only implemented by the warp server.</p>
+<p>Request handling in WAI is defined by the <code>Application</code> type <sup id=fnref:3><a href=#fn:3 class=footnote-ref role=doc-noteref>3</a></sup> :</p>
+<pre><code class=language-haskell>type Application = Request -&gt; (Response -&gt; IO ResponseReceived) -&gt; IO ResponseReceived
+</code></pre>
+<p>The <a href=http://hackage.haskell.org/package/wai-3.0.2.1/docs/Network-Wai-Internal.html#t:Request><code>Request</code></a> gives access to the request headers, query string, request body and so on, while the <code>Response -> IO ResponseReceived</code> callback allows us to send a response we have created. A typical WAI example you might come across will show how to send a simple response:</p>
+<pre><code class=language-haskell>{-# LANGUAGE OverloadedStrings #-}
+import Network.HTTP.Types (status200)
+import Network.Wai
+import Network.Wai.Handler.Warp (run)
+
+app :: Application
+app _ respond = respond $
+  responseLBS status200 [(&quot;Content-Type&quot;, &quot;text/plain&quot;)] &quot;hello&quot;
+
+main = run 3000 app
+</code></pre>
+<p>So from a web developer&rsquo;s perspective, a WAI application is a single function which is called for each request and sends back a response. The code runs in the IO monad and there&rsquo;s no out-of-the-box support for performing redirects, cookie handling, managing sessions or supporting different response types such as text, HTML or JSON. Web frameworks like Scotty and Yesod build these features on top of WAI using their own custom handler monads, meaning you won&rsquo;t usually call the WAI functions directly in your code. Frameworks also provide some kind of routing DSL, usually based on the request path and method (GET, POST etc.), so you can map different requests to different handler functions.</p>
+<h3 id=the-handler-monad>The Handler Monad</h3>
+<p>The handler monad provides convenient (read-only) access to the request (headers, parameters) and also provides functions to build the response. This is typically achieved using a combination of <code>ReaderT</code> and <code>StateT</code> monad transformers <sup id=fnref:4><a href=#fn:4 class=footnote-ref role=doc-noteref>4</a></sup> <sup id=fnref:5><a href=#fn:5 class=footnote-ref role=doc-noteref>5</a></sup>. So we could start with something like</p>
+<pre><code class=language-haskell>{-# LANGUAGE OverloadedStrings #-}
+
+import Control.Monad.Reader
+import Control.Monad.State
+import Data.Map.Strict (Map)
+import Data.Text (Text)
+import qualified Data.ByteString.Lazy as BL
+import Network.HTTP.Types (ResponseHeaders, Status)
+import Network.Wai (Request)
+
+
+type Params = Map Text [Text]
+
+data RequestData = RequestData
+    { waiReq :: Request
+    , queryParams :: Params
+    , postParams  :: Params
+    }
+
+data ResponseState = ResponseState
+    { resStatus :: Status
+    , resHeaders :: ResponseHeaders
+    , content :: BL.ByteString
+    }
+
+type Handler a = ReaderT RequestData (StateT ResponseState IO) a
+</code></pre>
+<p><code>RequestData</code> provides access to the original WAI request as well as the parsed request parameters and is accessed via the reader monad. <code>ResponseState</code> stores the status code, headers and response content. Here we&rsquo;re assuming the only requirement is to handle simple content we can create as a <code>ByteString</code>, so we&rsquo;re forgetting about streaming responses or serving up files directly. Similarly we&rsquo;re ignoring file uploads in the request data <sup id=fnref:6><a href=#fn:6 class=footnote-ref role=doc-noteref>6</a></sup>.</p>
+<h3 id=routing>Routing</h3>
+<p>Our application will consist of request handler functions written in the <code>Handler</code> monad. We also need some way of mapping different requests to the correct handlers. Frameworks generally include a DSL to do this, often using Sinatra-style verb/path combinations, including support for capturing URL parameters and converting parameters to specific types.</p>
+<p>A very simple routing option is to just pattern match on the <code>pathInfo</code> property of the WAI <code>Request</code>, which is of type <code>[Text]</code>:</p>
+<pre><code class=language-haskell>type Router = [Text] -&gt; Handler ()
+</code></pre>
+<p>We can then build our application as a simple routing table:</p>
+<pre><code class=language-haskell>myAppRouter :: Router
+myAppRouter path = case path of
+  [&quot;home&quot;]    -&gt; myHomePageHandler
+  [&quot;login&quot;]   -&gt; loginHandler
+  [&quot;logout&quot;]  -&gt; logoutHandler
+  [&quot;user&quot;, u] -&gt; userHandler u
+  _           -&gt; notFound
+</code></pre>
+<p>For a given request, the router will give us a corresponding handler which we can run. The type is <code>Handler ()</code> since the handler doesn&rsquo;t return anything. The <code>ResponseState</code> retrieved from the State monad gives us all we need to send the response. This isn&rsquo;t a very flexible approach, but it&rsquo;s very easy to understand and fine as a first option if we don&rsquo;t need to be able to compose routers and so on. You can find routing packages on Hackage but that&rsquo;s a topic for another time.</p>
+<h3 id=running-the-handler>Running the Handler</h3>
+<p>What does it actually mean to run the handler? Before we look at the code, we need to make some minor changes to the <code>Handler</code> type to support short-circuiting.</p>
+<h4 id=short-circuiting-in-the-handler-monad>Short-Circuiting in the Handler Monad</h4>
+<p>In a web application, if we redirect to a different URL, we generally want the response to complete at that point. For example, if we have a request which requires an authenticated user, we might redirect them to a login page if they haven&rsquo;t logged in, but if they&rsquo;re already authenticated, we&rsquo;d want the handler code to proceed.
+Another obvious short-circuiting case is when something goes wrong during execution and we want to immediately send an error response.
+If the monad doesn&rsquo;t short-circuit, then the only alternative is to use nested <code>if/else</code> or <code>case</code> statements to control which code is executed <sup id=fnref:7><a href=#fn:7 class=footnote-ref role=doc-noteref>7</a></sup>.</p>
+<p>You might also want the monad to short-circuit whenever you write the response content. In &ldquo;real world&rdquo; frameworks the behaviour varies so you need to know how each of them work <sup id=fnref:8><a href=#fn:8 class=footnote-ref role=doc-noteref>8</a></sup>.</p>
+<p>So how do we make our monad short-circuit? One option is to add the <code>EitherT</code> monad transformer to our existing monad. If you&rsquo;re not familiar with <code>EitherT</code>, the behaviour is analogous to the familiar <code>Either</code> type <sup id=fnref:9><a href=#fn:9 class=footnote-ref role=doc-noteref>9</a></sup>. If we call <a href=http://hackage.haskell.org/package/either-4.3.2/docs/Control-Monad-Trans-Either.html#v:left><code>left</code></a> (or equivalently <code>throwError</code> since <code>EitherT</code> is a <code>MonadError</code> instance), the monad will short-circuit <sup id=fnref:10><a href=#fn:10 class=footnote-ref role=doc-noteref>10</a></sup>.</p>
+<pre><code class=language-haskell>data HandlerResult = Redirect ByteString     -- Redirect to a URL
+                   | ResponseComplete        -- Send the response
+                   | HandlerError ByteString -- Send an internal error response
+                     deriving (Show, Eq)
+
+type Handler a = EitherT HandlerResult (ReaderT RequestData (StateT ResponseState IO)) a
+</code></pre>
+<p>When we call <code>runEitherT</code> followed by <code>runReaderT</code> and <code>runStateT</code>, the result is of type <code>IO (Either HandlerResult (), ResponseState)</code>.</p>
+<h4 id=the-runhandler-function>The <code>runHandler</code> Function</h4>
+<p>As things stand now, we have a WAI <code>Request</code> object passed as an argument to the <code>Application</code> type. To process it, we lookup the handler in our <code>Router</code> and then:</p>
+<ul>
+<li>Create a <code>RequestData</code> from the <code>Request</code></li>
+<li>Create an initial <code>ResponseState</code></li>
+<li>Run the hander to get back the <code>Either HandlerExcept ()</code> result and the final <code>ResponseState</code></li>
+</ul>
+<p>The complete <code>runHandler</code> function looks like this:</p>
+<pre><code class=language-haskell>import Network.Wai.Parse
+
+runHandler :: Request -&gt; Handler () -&gt; IO Response
+runHandler req h  = do
+    (pParams, _) &lt;- parseRequestBody lbsBackEnd req
+    let initRes = ResponseState status200 [] &quot;&quot;
+        rd = RequestData
+              { waiReq      = req
+              , queryParams = toMap $ fmap (\(n, v) -&gt; (n, fromMaybe &quot;&quot; $ v)) $ queryString req
+              , postParams  = toMap pParams
+              }
+
+    (result, res) &lt;- runStateT (runReaderT (runEitherT h) rd) initRes
+    let hdrs = resHeaders res
+    return $ case result of
+        Left ResponseComplete   -&gt; responseLBS (resStatus res) hdrs (content res)
+        Left (Redirect url)     -&gt; responseLBS status302 ((hLocation, url) : hdrs) &quot;&quot;
+        Left (HandlerError msg) -&gt; responseLBS internalServerError500 hdrs (BL.fromStrict msg)
+        Right _ -&gt; error &quot;Not handled&quot;
+
+toMap :: [(ByteString, ByteString)] -&gt; Params
+toMap = M.unionsWith (++) . map (\(x, y) -&gt; M.singleton (TE.decodeUtf8 x) [TE.decodeUtf8 y])
+</code></pre>
+<p>The function <a href=https://github.com/yesodweb/wai/blob/wai-extra/3.0.3/wai-extra/Network/Wai/Parse.hs#L174><code>parseRequestBody</code></a> is part of the <a href=http://hackage.haskell.org/package/wai-extra><code>wai-extra</code></a> library. It attempts to parse the request body as <a href=http://www.w3.org/TR/html401/interact/forms.html#h-17.13.4>HTML Form data</a>, returning a tuple containing a list of submitted parameters and a list of uploaded files. Since we aren&rsquo;t supporting file uploads we ignore the second element of the tuple. If the request <code>content-type</code> is neither <code>application/x-www-form-urlencoded</code> nor <code>multipart/form-data</code>, then both these arrays will be empty and we need to read and parse the request body ourselves. We&rsquo;ll look at this below.</p>
+<p>Note that we&rsquo;re taking the approach that <em>all</em> responses should short-circuit and assume it&rsquo;s a programmer error if the handler doesn&rsquo;t redirect, write a response or return an error message. This might be confusing if you&rsquo;re used to the <code>Left</code> constructor of <code>Either</code> being the &ldquo;error&rdquo; case, but it&rsquo;s really just the case that short-circuits <sup id=fnref:11><a href=#fn:11 class=footnote-ref role=doc-noteref>11</a></sup>.</p>
+<h3 id=functions-in-the-handler-monad>Functions in the Handler Monad</h3>
+<p>The handler monad is not very useful by itself. We want to hide the details behind a convenient API for reading request properties and creating the response. We&rsquo;ll look at some simple examples, but you can obviously write whatever functions best suit your needs.</p>
+<h4 id=reading-the-request>Reading the request</h4>
+<p>When processing a request, we typically want to read parameters and/or the request body. Most frameworks do not differentiate between different types of request parameters, but let&rsquo;s suppose we want to treat request body parameters separately from query string parameters <sup id=fnref:12><a href=#fn:12 class=footnote-ref role=doc-noteref>12</a></sup>. We&rsquo;ll also assume that it&rsquo;s an error to send duplicate values of the same parameter:</p>
+<pre><code class=language-haskell>postParam :: Text -&gt; Handler Text
+postParam name = asks postParams &gt;&gt;= lookupParam name
+
+queryParam :: Text -&gt; Handler Text
+queryParam name = asks queryParams &gt;&gt;= lookupParam name
+
+lookupParam :: Text -&gt; Params -&gt; Handler Text
+lookupParam name params = case M.lookup name params of
+    Just [v] -&gt; return v
+    _        -&gt; throwError $ HandlerError $ B.concat [&quot;Missing or duplicate parameter&quot;, TE.encodeUtf8 name]
+</code></pre>
+<p>WAI&rsquo;s <code>Request</code> record type has a field called <code>requestBody</code> which is of type <code>IO ByteString</code>. It produces the complete body a chunk at a time, returning an empty <code>ByteString</code> when the body is completely consumed. There&rsquo;s also a convenience function to do this, which we can wrap to create our <code>body</code> function:</p>
+<pre><code class=language-haskell>body :: Handler BL.ByteString
+body = asks waiReq &gt;&gt;= liftIO . strictRequestBody
+</code></pre>
+<p>Note that the body can only be read once. It may already have been read by the function <code>parseRequestBody</code> which we used above and in that case, the <code>body</code> function would return an empty value <sup id=fnref:13><a href=#fn:13 class=footnote-ref role=doc-noteref>13</a></sup>.</p>
+<h4 id=building-the-response>Building the response</h4>
+<p>For the response, we&rsquo;ll start by writing functions to:</p>
+<ul>
+<li>redirect to another URL</li>
+<li>set the status</li>
+<li>set the content as text, JSON, HTML</li>
+</ul>
+<p>The redirect function just takes a URL as a <code>ByteString</code> and short-circuits with the corresponding <code>HandlerResult</code> value:</p>
+<pre><code class=language-haskell>redirect :: ByteString -&gt; Handler a
+redirect = throwError . Redirect
+</code></pre>
+<p>The <code>runHandler</code> function we wrote above does the rest of the work, setting the status code to 302 and the <code>Location</code> header to the supplied URL.</p>
+<p>Setting the response status to a different value is easily done by changing the state:</p>
+<pre><code class=language-haskell>status :: Status -&gt; Handler ()
+status s = modify $ \rs -&gt; rs { resStatus = s }
+</code></pre>
+<p>and we can write the response content as text, JSON or (Blaze) HTML using the following functions:</p>
+<pre><code class=language-haskell>import Data.Aeson
+import Text.Blaze.Html (Html)
+import Text.Blaze.Html.Renderer.Utf8 (renderHtml)
+
+text :: Text -&gt; Handler ()
+text t = setContentType &quot;text/plain; charset=utf-8&quot; &gt;&gt; (rawBytes . BL.fromStrict $ TE.encodeUtf8 t)
+
+json :: ToJSON a =&gt; a -&gt; Handler ()
+json j = setContentType &quot;application/json&quot; &gt;&gt; rawBytes (encode j)
+
+html :: Html -&gt; Handler ()
+html h = setContentType &quot;text/html; charset=utf-8&quot; &gt;&gt; rawBytes (renderHtml h)
+
+rawBytes :: BL.ByteString -&gt; Handler ()
+rawBytes b = modify (\rs -&gt; rs { content = b }) &gt;&gt; throwError ResponseComplete
+
+setHeader :: HeaderName -&gt; ByteString -&gt; Handler ()
+setHeader name value = modify $ \rs -&gt; rs { resHeaders = (name, value) : resHeaders rs }
+
+setContentType :: ByteString -&gt; Handler ()
+setContentType = setHeader &quot;Content-Type&quot;
+</code></pre>
+<h2 id=exception-handling>Exception Handling</h2>
+<p>So far we&rsquo;ve assumed that every <code>Handler</code> will produce a value of type <code>Either HandlerResult ()</code>, but what happens if the code throws an exception instead? We can test this easily by just adding the following route to our <code>myAppRouter</code> above:</p>
+<pre><code class=language-haskell>[&quot;eek&quot;]  -&gt; error &quot;eek!&quot;
+</code></pre>
+<p>Requesting the URL <code>/eek</code> from a browser returns the text response &ldquo;Something went wrong&rdquo; with a 500 response code. This is the default response produced by Warp&rsquo;s internal error handler and it is easily customized <sup id=fnref:14><a href=#fn:14 class=footnote-ref role=doc-noteref>14</a></sup>. Alternatively we can catch the exception ourselves. We still need a function to convert our router into an <code>Application</code>, so we can do it there:</p>
+<pre><code class=language-haskell>routerToApplication :: Router -&gt; Application
+routerToApplication route req respond =
+  (runHandler req $ route pathInfo req)
+    `catch` λ(e :: SomeException) -&gt; return $ responseLBS internalServerError500 [] $ &quot;Internal error&quot;
+</code></pre>
+<h2 id=conclusion>Conclusion</h2>
+<p>Even though WAI is not really a standard web interface supported by multiple servers, it <em>is</em> common to multiple frameworks so an understanding WAI and Warp is useful if you are likely to be developing Haskell web applications.</p>
+<p>In this article we&rsquo;ve built a simple set of functions with which we can write web handlers which would look quite similar to those of a framework like Scotty, and you should now hopefully have a clearer idea of how they work. The code is available from the accompanying samples repository <a href=https://github.com/broch/brochio-samples/blob/byowai/ByoWai.hs>on github</a>, on the <code>byowai</code> branch. The branch commit history closely follows the structure of the article and should compile at each stage. For a more complex example, you can also see this kind of code in use in a project I&rsquo;ve been working on which is an implementation of the <a href=http://openid.net/developers/specs/>OpenID Connect specification</a> in Haskell <sup id=fnref:15><a href=#fn:15 class=footnote-ref role=doc-noteref>15</a></sup>. I&rsquo;ll hopefully find time to write up more articles on this topic as the development proceeds.</p>
+<section class=footnotes role=doc-endnotes>
+<hr>
+<ol>
+<li id=fn:1 role=doc-endnote>
+<p>Warp doesn&rsquo;t automatically limit the request size, for example, so someone can crash your application by sending a very large request. For example, you can use the curl command <code>curl -v --data-urlencode 'username@my_giant_file.txt' localhost:3000/login</code> to send a large file as a parameter. See also, Yesod&rsquo;s <code>maximumContentLength</code> setting, which it uses to <a href=https://github.com/yesodweb/yesod/blob/yesod-core/1.4.6/yesod-core/Yesod/Core/Internal/Request.hs#L55>limit the request body size</a>.&#160;<a href=#fnref:1 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:2 role=doc-endnote>
+<p><a href=http://hackage.haskell.org/package/scotty>Scotty</a>, <a href=http://www.yesodweb.com/>Yesod</a>, <a href=http://hackage.haskell.org/package/hails>Hails</a>, <a href=http://hackage.haskell.org/package/apiary>Apiary</a>, <a href=http://www.spock.li/>Spock</a>, <a href=http://hackage.haskell.org/package/Wheb>Wheb</a>, <a href=http://hackage.haskell.org/package/simple>Simple</a>. For a more complete list, you can look through <a href=http://packdeps.haskellers.com/reverse/warp>Warp&rsquo;s reverse dependencies</a>.&#160;<a href=#fnref:2 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:3 role=doc-endnote>
+<p>For a good overview of WAI, see the <a href=http://www.yesodweb.com/book-1.4/web-application-interface>Yesod Book</a>.&#160;<a href=#fnref:3 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:4 role=doc-endnote>
+<p>The <a href=https://hackage.haskell.org/package/mtl-2.1.2/docs/Control-Monad-RWS-Strict.html#g:2>RWST</a> monad transformer is another possibility and is used by the <a href=https://github.com/agrafix/Spock/blob/0.7.5.1/src/Web/Spock/Internal/Wire.hs#L89>Spock Framework</a>. In this case the &ldquo;writer&rdquo; part of the monad is ignored.&#160;<a href=#fnref:4 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:5 role=doc-endnote>
+<p>For an example which builds its own monad from scratch, see Apiary&rsquo;s <a href=http://hackage.haskell.org/package/apiary-1.2.0/docs/src/Control-Monad-Apiary-Action-Internal.html#ActionT><code>ActionT</code></a> or Simple&rsquo;s <a href=https://github.com/alevy/simple/blob/v0.9.0.0/simple/src/Web/Simple/Controller/Trans.hs#L51><code>ControllerT</code></a>.&#160;<a href=#fnref:5 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:6 role=doc-endnote>
+<p>You&rsquo;ll see these extra request and response data options in Scotty&rsquo;s <a href=https://github.com/scotty-web/scotty/blob/0.9.0/Web/Scotty/Internal/Types.hs#L108><code>ActionEnv</code> and <code>Content</code></a> types, for example.&#160;<a href=#fnref:6 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:7 role=doc-endnote>
+<p>If we look at the type signatures for the <code>redirect</code> functions in existing frameworks, the handler monad is parameterized with an arbitrary type. In Scotty, for example, the type is <code>redirect :: Text -> ActionM a</code> so we can immediately deduce that <code>redirect</code> <em>must</em> short-circuit since it can&rsquo;t return an arbitrary value.&#160;<a href=#fnref:7 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:8 role=doc-endnote>
+<p>Scotty <a href=https://github.com/scotty-web/scotty/blob/0.9.0/Web/Scotty/Action.hs#L273>doesn&rsquo;t complete the response</a> when you write the content using a function like <code>text</code> or <code>json</code> whereas <a href=https://github.com/agrafix/Spock/blob/0.7.5.1/src/Web/Spock/Internal/CoreAction.hs#L210>Spock does</a>. A list of Yesod handler functions which short-circuit can be found in the <a href=http://www.yesodweb.com/book-1.4/routing-and-handlers>Routing and Handlers</a> chapter of the Yesod book.&#160;<a href=#fnref:8 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:9 role=doc-endnote>
+<p><code>EitherT</code> can be found in the <a href=http://hackage.haskell.org/package/either><code>either</code></a> package and is also re-exported by the <code>errors</code> package.&#160;<a href=#fnref:9 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:10 role=doc-endnote>
+<p>You may notice that <code>ExceptT</code> is <a href=https://github.com/scotty-web/scotty/blob/master/Web/Scotty/Internal/Types.hs#L137>used in practice</a> instead of <code>EitherT</code>. However, this requires version 2.2.1 or later of the <code>mtl</code> library, which in turn requires the use of <code>transformers 0.4.*</code>. GHC 7.8 comes with transformers 0.3 so you can end up with conflicting versions in your project if it depends on GHC and cabal will complain. <code>EitherT</code> does the same job, more or less, so we stick with that for now.&#160;<a href=#fnref:10 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:11 role=doc-endnote>
+<p>It&rsquo;s also confusing that the naming conventions often reinforce this. For example, Scotty&rsquo;s <a href=https://github.com/scotty-web/scotty/blob/0.9.0/Web/Scotty/Internal/Types.hs#L76><code>ActionError</code></a> type deals with both redirects and errors.&#160;<a href=#fnref:11 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:12 role=doc-endnote>
+<p>For example, we might want to report an error if sensitive data like a password is sent in a URL. We couldn&rsquo;t do this using Scotty&rsquo;s <code>param</code> function, for instance.&#160;<a href=#fnref:12 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:13 role=doc-endnote>
+<p>Scotty <a href=https://github.com/scotty-web/scotty/blob/0.9.0/Web/Scotty/Route.hs#L137>reads the request body</a> and stores it along with the other request data so that it can be accessed more than once.&#160;<a href=#fnref:13 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:14 role=doc-endnote>
+<p>The <a href=http://hackage.haskell.org/package/warp-3.0.5/docs/Network-Wai-Handler-Warp.html#v:setOnExceptionResponse><code>setOnExceptionResponse</code></a> setting can be used for customization. The exception is caught and the response sent in the <a href=https://github.com/yesodweb/wai/blob/warp/3.0.5/warp/Network/Wai/Handler/Warp/Run.hs#L282><code>serveConnection</code></a> function. The exception is then re-thrown to the <code>fork</code> function which <a href=https://github.com/yesodweb/wai/blob/warp/3.0.5/warp/Network/Wai/Handler/Warp/Run.hs#L256>calls the exception handler</a> configured with <a href=http://hackage.haskell.org/package/warp-3.0.5/docs/Network-Wai-Handler-Warp.html#v:setOnException><code>setOnException</code></a> and cleans up resources.&#160;<a href=#fnref:14 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+<li id=fn:15 role=doc-endnote>
+<p>The project is also on <a href=https://github.com/tekul/broch>github</a>. It&rsquo;s a work in progress but also includes session handling, for example.&#160;<a href=#fnref:15 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
+</li>
+</ol>
+</section>
+</article>
+</main>
+</div>
+</body>
+</html>
