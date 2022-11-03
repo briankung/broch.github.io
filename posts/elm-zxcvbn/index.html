@@ -1,85 +1,17 @@
-<!doctype html><html lang=en>
-<head>
-<title>Checking Password Strength in Elm, Part 1: Zxcvbn</title>
-<meta http-equiv=content-type content="text/html" charset=utf-8>
-<meta name=viewport content="width=device-width,initial-scale=1">
-<meta name=description content="Using the Zxcvbn Javascript library in an Elm application.">
-<link rel=stylesheet href="/css/main.min.9f61d89855d8bb3b8b3d01deb7e971226ba56b7dc56d61ee90a1ba26253a02be.css" integrity="sha256-n2HYmFXYuzuLPQHet+lxImula33FbWHukKG6JiU6Ar4=">
-<link rel=icon type=image/svg+xml href=/images/broch.svg>
-<link rel=stylesheet href=https://rsms.me/inter/inter.css>
-<script src=/js/prism.js></script>
-</head>
-<body>
-<nav class="bg-white mb-1 shadow">
-<div class="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
-<div class="relative flex justify-between h-20">
-<div class="absolute inset-y-0 left-0 flex items-center sm:hidden">
-<button id=menu-button type=button class="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-red-600" aria-controls=mobile-menu aria-expanded=false>
-<span class=sr-only>Open main menu</span><svg id="open-menu-icon" class="block h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentcolor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg><svg id="close-menu-icon" class="hidden h-6 w-6" xmlns="htp://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentcolor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18 18 6M6 6l12 12"/></svg>
-</button>
-</div>
-<div class="flex-1 flex items-center justify-center sm:items-stretch sm:justify-start">
-<div class="flex-shrink-0 flex items-center">
-<a href=/>
-<img class="hidden lg:block h-14 w-auto" src=/images/broch-logo-text.svg alt=Broch>
-<img class="block lg:hidden h-14 w-auto" src=/images/broch.svg alt=Broch>
-</a>
-</div>
-<div class="hidden sm:ml-9 sm:flex sm:space-x-8">
-<a class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-lg font-medium" href=/ title>Home</a>
-<a class="border-red-600 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-lg font-medium" href=/posts/ title=Blog>Blog</a>
-</div>
-</div>
-<div class="absolute inset-y-0 right-0 flex items-center pr-2 sm:static sm:inset-auto sm:ml-6 sm:pr-0">
-<a href=/index.xml class="bg-white p-1 rounded-full text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-<span class=sr-only>RSS Feed</span><svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentcolor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 5c7.18.0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z"/></svg>
-</a>
-</dev>
-</div>
-</div>
-<div class=hidden id=mobile-menu>
-<div class="pt-2 pb-4 space-y-1">
-<a class="border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700 block pl-3 pr-4 py-2 border-l-4 text-base font-medium" href=/ title>Home</a>
-<a class="bg-red-50 border-red-600 text-red-900 block pl-3 pr-4 py-2 border-l-4 text-base font-medium" href=/posts/ title=Blog>Blog</a>
-</div>
-</div>
-</nav>
-<script>var menu_open=!1,menu_button=document.getElementById("menu-button"),menu=document.getElementById("mobile-menu"),open_icon=document.getElementById("open-menu-icon"),close_icon=document.getElementById("close-menu-icon");menu_button.addEventListener("click",function(){menu_open=!menu_open,menu_open?(menu.className="block sm:hidden",close_icon.className.baseVal="block h-6 w-6",open_icon.className.baseVal="hidden h-6 w-6"):(menu.className="hidden",open_icon.className.baseVal="block h-6 w-6",close_icon.className.baseVal="hidden h-6 w-6")})</script>
-<div class="w-full max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
-<main>
-<article class="mx-auto prose prose-lg">
-<h1>Checking Password Strength in Elm, Part 1: Zxcvbn</h1>
-<p class="block flex display-between text-gray-500 italic">
-March 4, 2018
-<span class=ml-3>(Updated, February 25, 2021)</span>
-</p>
-<p>As part of a recent Elm project, I wrote some front-end user registration code which required that new users choose a password. I used the <a href=https://github.com/dropbox/zxcvbn>zxcvbn</a> library to measure password strength and this seems like a good, non-trivial example to show how to call Javascript from Elm. In <a href=/posts/elm-have-i-been-pwned>Part 2</a>, we&rsquo;ll look at how to add extra checks by calling the <a href=https://haveibeenpwned.com/API/v3#PwnedPasswords>Have I Been Pwned passwords API</a> which maintains a database of half a billion compromised password hashes.</p>
-<p>The full code for both parts can be found <a href=https://github.com/tekul/elm-password-check>on github</a>.</p>
-<p>Zxcvbn is a password strength estimator which makes use of password frequency lists, dictionaries and common patterns. Note that the default version is heavily biased towards English language so it would need to be built with custom dictionaries if that&rsquo;s an issue <sup id=fnref:1><a href=#fn:1 class=footnote-ref role=doc-noteref>1</a></sup>.</p>
-<p>The strength of a password is based on estimating the number of guesses it would take for a password cracker to find it. It&rsquo;s not perfect, but is better than forcing annoying rules on users such as adding <a href=https://www.xkcd.com/936/>numbers and symbols to passwords</a> which is no longer seen as good practice. Standards authorities like NIST now <a href=https://stealthbits.com/blog/nist-password-guidelines/>recommend</a> disallowing simple sequences and rejecting passwords which are found in password breach databases.</p>
-<div id=elm-zxcvbn-app class="w-full mt-10 px-10 py-10 border rounded-md shadow mx-auto sm:w-2/3">
-<div id=app></div>
-</div>
-<script src=app.js></script>
-<script>var app=Elm.Main.init({node:document.getElementById('app'),flags:{}});app.ports.checkPassword.subscribe(function(a){var b=zxcvbn(a);app.ports.passwordChecked.send(b)})</script>
-<script async src=/js/zxcvbn.js></script>
-<h2 id=elm-ports>Elm Ports</h2>
-<p>From Elm, we want to be able to call a <code>checkPassword</code> function, passing the password as a string. This function is a &ldquo;port&rdquo;, so the Elm runtime knows to call an external Javascript function as the implementation.</p>
-<pre><code class=language-elm>port checkPassword : String -&gt; Cmd msg
+<!doctype html><html lang=en><head><title>Checking Password Strength in Elm, Part 1: Zxcvbn</title><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=description content="Using the Zxcvbn Javascript library in an Elm application."><link rel=stylesheet href="/css/main.min.e5e3c9f3b6898f07b5fcdc75241740fe9565873494c47e1eae722ef2ff3c322b.css" integrity="sha256-5ePJ87aJjwe1/Nx1JBdA/pVlhzSUxH4ernIu8v88Mis="><link rel=icon type=image/svg+xml href=/images/broch.svg><link rel=stylesheet href=https://rsms.me/inter/inter.css><script src=/js/prism.js></script></head><body><nav class="bg-white mb-1 shadow"><div class="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8"><div class="relative flex justify-between h-20"><div class="absolute inset-y-0 left-0 flex items-center sm:hidden"><button id=menu-button type=button class="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-red-600" aria-controls=mobile-menu aria-expanded=false>
+<span class=sr-only>Open main menu</span><svg id="open-menu-icon" class="block h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentcolor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg><svg id="close-menu-icon" class="hidden h-6 w-6" xmlns="htp://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentcolor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18 18 6M6 6l12 12"/></svg></button></div><div class="flex-1 flex items-center justify-center sm:items-stretch sm:justify-start"><div class="flex-shrink-0 flex items-center"><a href=/><img class="hidden lg:block h-14 w-auto" src=/images/broch-logo-text.svg alt=Broch>
+<img class="block lg:hidden h-14 w-auto" src=/images/broch.svg alt=Broch></a></div><div class="hidden sm:ml-9 sm:flex sm:space-x-8"><a class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-lg font-medium" href=/ title>Home</a>
+<a class="border-red-600 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-lg font-medium" href=/posts/ title=Blog>Blog</a></div></div><div class="absolute inset-y-0 right-0 flex items-center pr-2 sm:static sm:inset-auto sm:ml-6 sm:pr-0"><a href=/index.xml class="bg-white p-1 rounded-full text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"><span class=sr-only>RSS Feed</span><svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentcolor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 5c7.18.0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z"/></svg></a></dev></div></div><div class=hidden id=mobile-menu><div class="pt-2 pb-4 space-y-1"><a class="border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700 block pl-3 pr-4 py-2 border-l-4 text-base font-medium" href=/ title>Home</a>
+<a class="bg-red-50 border-red-600 text-red-900 block pl-3 pr-4 py-2 border-l-4 text-base font-medium" href=/posts/ title=Blog>Blog</a></div></div></nav><script>var menu_open=!1,menu_button=document.getElementById("menu-button"),menu=document.getElementById("mobile-menu"),open_icon=document.getElementById("open-menu-icon"),close_icon=document.getElementById("close-menu-icon");menu_button.addEventListener("click",function(){menu_open=!menu_open,menu_open?(menu.className="block sm:hidden",close_icon.className.baseVal="block h-6 w-6",open_icon.className.baseVal="hidden h-6 w-6"):(menu.className="hidden",open_icon.className.baseVal="block h-6 w-6",close_icon.className.baseVal="hidden h-6 w-6")})</script><div class="w-full max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8"><main><article class="mx-auto prose prose-lg"><h1>Checking Password Strength in Elm, Part 1: Zxcvbn</h1><p class="block flex display-between text-gray-500 italic">March 4, 2018
+<span class=ml-3>(Updated, February 25, 2021)</span></p><p>As part of a recent Elm project, I wrote some front-end user registration code which required that new users choose a password. I used the <a href=https://github.com/dropbox/zxcvbn>zxcvbn</a> library to measure password strength and this seems like a good, non-trivial example to show how to call Javascript from Elm. In <a href=/posts/elm-have-i-been-pwned>Part 2</a>, we&rsquo;ll look at how to add extra checks by calling the <a href=https://haveibeenpwned.com/API/v3#PwnedPasswords>Have I Been Pwned passwords API</a> which maintains a database of half a billion compromised password hashes.</p><p>The full code for both parts can be found <a href=https://github.com/tekul/elm-password-check>on github</a>.</p><p>Zxcvbn is a password strength estimator which makes use of password frequency lists, dictionaries and common patterns. Note that the default version is heavily biased towards English language so it would need to be built with custom dictionaries if that&rsquo;s an issue <sup id=fnref:1><a href=#fn:1 class=footnote-ref role=doc-noteref>1</a></sup>.</p><p>The strength of a password is based on estimating the number of guesses it would take for a password cracker to find it. It&rsquo;s not perfect, but is better than forcing annoying rules on users such as adding <a href=https://www.xkcd.com/936/>numbers and symbols to passwords</a> which is no longer seen as good practice. Standards authorities like NIST now <a href=https://stealthbits.com/blog/nist-password-guidelines/>recommend</a> disallowing simple sequences and rejecting passwords which are found in password breach databases.</p><div id=elm-zxcvbn-app class="w-full mt-10 px-10 py-10 border rounded-md shadow mx-auto sm:w-2/3"><div id=app></div></div><script src=app.js></script>
+<script>var app=Elm.Main.init({node:document.getElementById("app"),flags:{}});app.ports.checkPassword.subscribe(function(e){var t=zxcvbn(e);app.ports.passwordChecked.send(t)})</script><script async src=/js/zxcvbn.js></script><h2 id=elm-ports>Elm Ports</h2><p>From Elm, we want to be able to call a <code>checkPassword</code> function, passing the password as a string. This function is a &ldquo;port&rdquo;, so the Elm runtime knows to call an external Javascript function as the implementation.</p><pre><code class=language-elm>port checkPassword : String -&gt; Cmd msg
 
 port passwordChecked : (Json.Value -&gt; msg) -&gt; Sub msg
-</code></pre>
-<p>Zxcvbn produces a JSON value containing a score for the password and information about how the score was calculated. The second port, <code>passwordChecked</code> allows us to subscribe to the Zxcvbn response. The responses will then be received as messages through the application <code>update</code> function.</p>
-<h2 id=javascript>Javascript</h2>
-<p>In Javascript we need to hook up our port implementations to Javascript code. The <code>checkPassword</code> function is just implemented as a call to the <code>zxcvbn</code> function, passing in the password. It then sends the response back through the <code>passwordChecked</code> port.</p>
-<pre><code class=language-javascript>app.ports.checkPassword.subscribe(function(password) {
+</code></pre><p>Zxcvbn produces a JSON value containing a score for the password and information about how the score was calculated. The second port, <code>passwordChecked</code> allows us to subscribe to the Zxcvbn response. The responses will then be received as messages through the application <code>update</code> function.</p><h2 id=javascript>Javascript</h2><p>In Javascript we need to hook up our port implementations to Javascript code. The <code>checkPassword</code> function is just implemented as a call to the <code>zxcvbn</code> function, passing in the password. It then sends the response back through the <code>passwordChecked</code> port.</p><pre><code class=language-javascript>app.ports.checkPassword.subscribe(function(password) {
     var report = zxcvbn(password);
     app.ports.passwordChecked.send(report);
 });
-</code></pre>
-<h2 id=decoding-json>Decoding JSON</h2>
-<p>When we receive the Zxcvbn report as a JSON value, we decode it into a matching Elm data structure to make sure it contains what we expect and to make it easier to work with:</p>
-<pre><code class=language-elm>type alias Zxcvbn =
+</code></pre><h2 id=decoding-json>Decoding JSON</h2><p>When we receive the Zxcvbn report as a JSON value, we decode it into a matching Elm data structure to make sure it contains what we expect and to make it easier to work with:</p><pre><code class=language-elm>type alias Zxcvbn =
     { password : String
     , guesses : Float
     , guessesLog10 : Float
@@ -90,42 +22,14 @@ port passwordChecked : (Json.Value -&gt; msg) -&gt; Sub msg
     , feedback : Feedback
     , matchSequence : List String
     }
-</code></pre>
-<p>Writing decoders in Elm is straightforward enough but requires quite a lot of boilerplate code. You can check the github repo for details. The call to Zxcvbn returns a lot of data, most of which isn&rsquo;t needed for a real-world application. Even though the <code>Zxcvbn</code> Elm record type above retains most of that data it could be a lot simpler <sup id=fnref:2><a href=#fn:2 class=footnote-ref role=doc-noteref>2</a></sup>. For a real application, we would probably only need the <code>score</code> and <code>feedback</code> fields to provide the strength meter and information on why particular passwords are unsuitable. The decoder would then also be a lot simpler. For a demo like this though, it&rsquo;s interesting to show how a password is matched by the library.</p>
-<h2 id=the-main-module>The Main module</h2>
-<p>The rest of the code is a standard Elm application. We have a simple model to contain the entered password and the decoded Zxcvbn report</p>
-<pre><code class=language-elm>type alias Model =
+</code></pre><p>Writing decoders in Elm is straightforward enough but requires quite a lot of boilerplate code. You can check the github repo for details. The call to Zxcvbn returns a lot of data, most of which isn&rsquo;t needed for a real-world application. Even though the <code>Zxcvbn</code> Elm record type above retains most of that data it could be a lot simpler <sup id=fnref:2><a href=#fn:2 class=footnote-ref role=doc-noteref>2</a></sup>. For a real application, we would probably only need the <code>score</code> and <code>feedback</code> fields to provide the strength meter and information on why particular passwords are unsuitable. The decoder would then also be a lot simpler. For a demo like this though, it&rsquo;s interesting to show how a password is matched by the library.</p><h2 id=the-main-module>The Main module</h2><p>The rest of the code is a standard Elm application. We have a simple model to contain the entered password and the decoded Zxcvbn report</p><pre><code class=language-elm>type alias Model =
     { password : String
     , zxcvbn : Maybe Zxcvbn
     }
-</code></pre>
-<p>In our <code>update</code> function we need to handle messages for both password input and password check responses</p>
-<pre><code class=language-elm>type Msg
+</code></pre><p>In our <code>update</code> function we need to handle messages for both password input and password check responses</p><pre><code class=language-elm>type Msg
     = SetPassword String
     | PasswordChecked Json.Value
-</code></pre>
-<p>The first message constructor is handled by just setting the password value in the model. For the second we call the Zxcvbn decoder and set the <code>zxcvbn</code> field in the model. The <code>view</code> function just renders an HTML input field for the password and shows the strength information for the entered value.</p>
-<p>It&rsquo;s important that we remember to include the <code>passwordChecked</code> port in our <code>subscriptions</code> function so that we receive responses from the Javascript code. These will arrive wrapped in a <code>PasswordChecked</code> message</p>
-<pre><code class=language-elm>subscriptions : Model -&gt; Sub Msg
+</code></pre><p>The first message constructor is handled by just setting the password value in the model. For the second we call the Zxcvbn decoder and set the <code>zxcvbn</code> field in the model. The <code>view</code> function just renders an HTML input field for the password and shows the strength information for the entered value.</p><p>It&rsquo;s important that we remember to include the <code>passwordChecked</code> port in our <code>subscriptions</code> function so that we receive responses from the Javascript code. These will arrive wrapped in a <code>PasswordChecked</code> message</p><pre><code class=language-elm>subscriptions : Model -&gt; Sub Msg
 subscriptions _ =
     passwordChecked PasswordChecked
-</code></pre>
-<h2 id=conclusion>Conclusion</h2>
-<p>It&rsquo;s quite easy to make use of a Javascript library like Zxcvbn, getting it to do a lot of work for us, but without compromising the safety of our Elm code. Ports provide a boundary which forces us to decode the data we get from Javascript into type-safe values before using them.</p>
-<p>In the second part, we&rsquo;ll look at calling an external API to get extra information on the suitability of our chosen password.</p>
-<section class=footnotes role=doc-endnotes>
-<hr>
-<ol>
-<li id=fn:1 role=doc-endnote>
-<p>For example, it will flag up &ldquo;iloveyou&rdquo; as being one of the most common passwords but it doesn&rsquo;t have a problem with &ldquo;ichliebedich&rdquo;. Have I Been Pwned? doesn&rsquo;t suffer from this issue and will tell you that the latter has been found more than 16000 times in password data breaches, so is clearly unsuitable.&#160;<a href=#fnref:1 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
-</li>
-<li id=fn:2 role=doc-endnote>
-<p>The <code>matchSequence</code> field is simplified to just include a list of matched tokens and the pattern type (dictionary, date, keyboard sequence etc.) rather than the full details for each sub-match.&#160;<a href=#fnref:2 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
-</li>
-</ol>
-</section>
-</article>
-</main>
-</div>
-</body>
-</html>
+</code></pre><h2 id=conclusion>Conclusion</h2><p>It&rsquo;s quite easy to make use of a Javascript library like Zxcvbn, getting it to do a lot of work for us, but without compromising the safety of our Elm code. Ports provide a boundary which forces us to decode the data we get from Javascript into type-safe values before using them.</p><p>In the second part, we&rsquo;ll look at calling an external API to get extra information on the suitability of our chosen password.</p><div class=footnotes role=doc-endnotes><hr><ol><li id=fn:1><p>For example, it will flag up &ldquo;iloveyou&rdquo; as being one of the most common passwords but it doesn&rsquo;t have a problem with &ldquo;ichliebedich&rdquo;. Have I Been Pwned? doesn&rsquo;t suffer from this issue and will tell you that the latter has been found more than 16000 times in password data breaches, so is clearly unsuitable.&#160;<a href=#fnref:1 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p></li><li id=fn:2><p>The <code>matchSequence</code> field is simplified to just include a list of matched tokens and the pattern type (dictionary, date, keyboard sequence etc.) rather than the full details for each sub-match.&#160;<a href=#fnref:2 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p></li></ol></div></article></main></div></body></html>

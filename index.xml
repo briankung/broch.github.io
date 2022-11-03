@@ -78,14 +78,14 @@ String.lines response
 &lt;p>&amp;ldquo;Have I Been Pwned?&amp;rdquo; is a great resource for accessing information on data breaches (you can also search by your email or phone number). It can be used to complement the Zxcvbn but also has the benefit that it uses real-world data, so it is less likely to miss things that Zxcvbn might, due to language differences, keyboard layouts and so on.&lt;/p>
 &lt;p>You might want to prevent a user from choosing a password which is found in HIBP if they are registering an account. Even if the password only has one or two matches, in a worst case scenario, your user may be reusing a password which is tied to their account in a data breach that is publicly available. Even if a password is completely random and theoretically unbreakable when hashed properly, it&amp;rsquo;s useless once it&amp;rsquo;s been compromised at a company which stored everything in plain text (and there have been plenty of those).&lt;/p>
 &lt;p>How strict you are about password policy obviously depends on what the account is for. If you have serious security requirements then passwords alone probably aren&amp;rsquo;t up to the job, no matter how strong they are, and an extra multi-factor authentication solution should be used.&lt;/p>
-&lt;section class="footnotes" role="doc-endnotes">
+&lt;div class="footnotes" role="doc-endnotes">
 &lt;hr>
 &lt;ol>
-&lt;li id="fn:1" role="doc-endnote">
+&lt;li id="fn:1">
 &lt;p>Note that a Hex encoded SHA-1 value is 40 characters long, so the suffixes we get back are 35 characters.&amp;#160;&lt;a href="#fnref:1" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
 &lt;/ol>
-&lt;/section></description></item><item><title>Checking Password Strength in Elm, Part 1: Zxcvbn</title><link>https://broch.tech/posts/elm-zxcvbn/</link><pubDate>Sun, 04 Mar 2018 00:00:00 +0000</pubDate><guid>https://broch.tech/posts/elm-zxcvbn/</guid><description>&lt;p>As part of a recent Elm project, I wrote some front-end user registration code which required that new users choose a password. I used the &lt;a href="https://github.com/dropbox/zxcvbn">zxcvbn&lt;/a> library to measure password strength and this seems like a good, non-trivial example to show how to call Javascript from Elm. In &lt;a href="https://broch.tech/posts/elm-have-i-been-pwned">Part 2&lt;/a>, we&amp;rsquo;ll look at how to add extra checks by calling the &lt;a href="https://haveibeenpwned.com/API/v3#PwnedPasswords">Have I Been Pwned passwords API&lt;/a> which maintains a database of half a billion compromised password hashes.&lt;/p>
+&lt;/div></description></item><item><title>Checking Password Strength in Elm, Part 1: Zxcvbn</title><link>https://broch.tech/posts/elm-zxcvbn/</link><pubDate>Sun, 04 Mar 2018 00:00:00 +0000</pubDate><guid>https://broch.tech/posts/elm-zxcvbn/</guid><description>&lt;p>As part of a recent Elm project, I wrote some front-end user registration code which required that new users choose a password. I used the &lt;a href="https://github.com/dropbox/zxcvbn">zxcvbn&lt;/a> library to measure password strength and this seems like a good, non-trivial example to show how to call Javascript from Elm. In &lt;a href="https://broch.tech/posts/elm-have-i-been-pwned">Part 2&lt;/a>, we&amp;rsquo;ll look at how to add extra checks by calling the &lt;a href="https://haveibeenpwned.com/API/v3#PwnedPasswords">Have I Been Pwned passwords API&lt;/a> which maintains a database of half a billion compromised password hashes.&lt;/p>
 &lt;p>The full code for both parts can be found &lt;a href="https://github.com/tekul/elm-password-check">on github&lt;/a>.&lt;/p>
 &lt;p>Zxcvbn is a password strength estimator which makes use of password frequency lists, dictionaries and common patterns. Note that the default version is heavily biased towards English language so it would need to be built with custom dictionaries if that&amp;rsquo;s an issue &lt;sup id="fnref:1">&lt;a href="#fn:1" class="footnote-ref" role="doc-noteref">1&lt;/a>&lt;/sup>.&lt;/p>
 &lt;p>The strength of a password is based on estimating the number of guesses it would take for a password cracker to find it. It&amp;rsquo;s not perfect, but is better than forcing annoying rules on users such as adding &lt;a href="https://www.xkcd.com/936/">numbers and symbols to passwords&lt;/a> which is no longer seen as good practice. Standards authorities like NIST now &lt;a href="https://stealthbits.com/blog/nist-password-guidelines/">recommend&lt;/a> disallowing simple sequences and rejecting passwords which are found in password breach databases.&lt;/p>
@@ -153,17 +153,17 @@ passwordChecked PasswordChecked
 &lt;h2 id="conclusion">Conclusion&lt;/h2>
 &lt;p>It&amp;rsquo;s quite easy to make use of a Javascript library like Zxcvbn, getting it to do a lot of work for us, but without compromising the safety of our Elm code. Ports provide a boundary which forces us to decode the data we get from Javascript into type-safe values before using them.&lt;/p>
 &lt;p>In the second part, we&amp;rsquo;ll look at calling an external API to get extra information on the suitability of our chosen password.&lt;/p>
-&lt;section class="footnotes" role="doc-endnotes">
+&lt;div class="footnotes" role="doc-endnotes">
 &lt;hr>
 &lt;ol>
-&lt;li id="fn:1" role="doc-endnote">
+&lt;li id="fn:1">
 &lt;p>For example, it will flag up &amp;ldquo;iloveyou&amp;rdquo; as being one of the most common passwords but it doesn&amp;rsquo;t have a problem with &amp;ldquo;ichliebedich&amp;rdquo;. Have I Been Pwned? doesn&amp;rsquo;t suffer from this issue and will tell you that the latter has been found more than 16000 times in password data breaches, so is clearly unsuitable.&amp;#160;&lt;a href="#fnref:1" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:2" role="doc-endnote">
+&lt;li id="fn:2">
 &lt;p>The &lt;code>matchSequence&lt;/code> field is simplified to just include a list of matched tokens and the pattern type (dictionary, date, keyboard sequence etc.) rather than the full details for each sub-match.&amp;#160;&lt;a href="#fnref:2" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
 &lt;/ol>
-&lt;/section></description></item><item><title>Double-Slit Diffraction in Elm</title><link>https://broch.tech/posts/double-slits-elm/</link><pubDate>Mon, 02 Jan 2017 00:00:00 +0000</pubDate><guid>https://broch.tech/posts/double-slits-elm/</guid><description>&lt;p>I&amp;rsquo;ve been meaning to try &lt;a href="http://elm-lang.org">Elm&lt;/a> for some time and finally made the effort to write some code. It&amp;rsquo;s a demo of the &lt;a href="https://en.wikipedia.org/wiki/Double-slit_experiment">double-slits experiment&lt;/a>. I already had some Java code which I wrote ages ago, but I&amp;rsquo;ve never got round to converting it to Javascript &lt;sup id="fnref:1">&lt;a href="#fn:1" class="footnote-ref" role="doc-noteref">1&lt;/a>&lt;/sup>. Elm seems like a nice alternative so I decided to give it a try.&lt;/p>
+&lt;/div></description></item><item><title>Double-Slit Diffraction in Elm</title><link>https://broch.tech/posts/double-slits-elm/</link><pubDate>Mon, 02 Jan 2017 00:00:00 +0000</pubDate><guid>https://broch.tech/posts/double-slits-elm/</guid><description>&lt;p>I&amp;rsquo;ve been meaning to try &lt;a href="http://elm-lang.org">Elm&lt;/a> for some time and finally made the effort to write some code. It&amp;rsquo;s a demo of the &lt;a href="https://en.wikipedia.org/wiki/Double-slit_experiment">double-slits experiment&lt;/a>. I already had some Java code which I wrote ages ago, but I&amp;rsquo;ve never got round to converting it to Javascript &lt;sup id="fnref:1">&lt;a href="#fn:1" class="footnote-ref" role="doc-noteref">1&lt;/a>&lt;/sup>. Elm seems like a nice alternative so I decided to give it a try.&lt;/p>
 &lt;div style="margin: 0 auto; width: 750px; height: 500px;">
 &lt;div id="slits">&lt;/div>
 &lt;/div>
@@ -225,17 +225,17 @@ should change the number of slits to ten.&lt;/p>
 &lt;h2 id="conclusion">Conclusion&lt;/h2>
 &lt;p>This was a brief overview of my first go at playing with Elm. My Javascript knowledge is rather limited, and I haven&amp;rsquo;t tried out any of its competitors so I can&amp;rsquo;t really draw any conclusions on how Elm compares. It certainly compared favourable with my experience of writing even small programs in Javascript. It allows you to write typed programs, with a similar syntax to Haskell and it limits what can happen in your program, making debugging a lot easier. You can step back through all the events you&amp;rsquo;ve received and inspect the resulting changes in the model. Elm puts you in a cosy little world within your application, where you are completely isolated from nasty runtime errors. That worked out fine for a simple application like this one, but how well it scales up into more complicated applications, I don&amp;rsquo;t know yet. The next thing on my Elm to-do list is to build something that actually talks to a server.&lt;/p>
 &lt;p>Any questions or suggestions, please &lt;a href="https://github.com/tekul/elm-slits/issues">post them on github&lt;/a>.&lt;/p>
-&lt;section class="footnotes" role="doc-endnotes">
+&lt;div class="footnotes" role="doc-endnotes">
 &lt;hr>
 &lt;ol>
-&lt;li id="fn:1" role="doc-endnote">
+&lt;li id="fn:1">
 &lt;p>When I was a student, my supervisor Sandy Watt wrote physics demo programs including one like this, and my Java code was based on his original version. His programs were written in Basic with embedded ARM code, but these days we can get away with a high-level language like Elm and rendering images with SVG without having to worry about performance.&amp;#160;&lt;a href="#fnref:1" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:2" role="doc-endnote">
+&lt;li id="fn:2">
 &lt;p>Elm gives us the value of the &lt;a href="https://developer.mozilla.org/en-US/docs/Web/API/MouseEvent/pageY">&lt;code>pageY&lt;/code>&lt;/a> property of the mouse event.&amp;#160;&lt;a href="#fnref:2" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
 &lt;/ol>
-&lt;/section></description></item><item><title>Linux Setup with XMonad</title><link>https://broch.tech/posts/linux-install/</link><pubDate>Sat, 19 Nov 2016 00:00:00 +0000</pubDate><guid>https://broch.tech/posts/linux-install/</guid><description>&lt;p>Earlier this year, after many years of using OSX, I decided to switch to using Linux for my desktop. Most of the development tools I use work better on Linux &amp;ndash; I mostly work directly with plain-text format files and I use the terminal a lot. I also wanted to use a tiling window manager with a minimal user interface. The changes Apple have been making to their machines and OS over the past few years have been irrelevant to my needs at best, and in some cases are downright annoying. The recent release of laptops with no escape key and yet more connectors (dongle hell) is just confirmation that I made the right choice. I bought a Thinkpad P50 as my work machine &lt;sup id="fnref:1">&lt;a href="#fn:1" class="footnote-ref" role="doc-noteref">1&lt;/a>&lt;/sup>.&lt;/p>
+&lt;/div></description></item><item><title>Linux Setup with XMonad</title><link>https://broch.tech/posts/linux-install/</link><pubDate>Sat, 19 Nov 2016 00:00:00 +0000</pubDate><guid>https://broch.tech/posts/linux-install/</guid><description>&lt;p>Earlier this year, after many years of using OSX, I decided to switch to using Linux for my desktop. Most of the development tools I use work better on Linux &amp;ndash; I mostly work directly with plain-text format files and I use the terminal a lot. I also wanted to use a tiling window manager with a minimal user interface. The changes Apple have been making to their machines and OS over the past few years have been irrelevant to my needs at best, and in some cases are downright annoying. The recent release of laptops with no escape key and yet more connectors (dongle hell) is just confirmation that I made the right choice. I bought a Thinkpad P50 as my work machine &lt;sup id="fnref:1">&lt;a href="#fn:1" class="footnote-ref" role="doc-noteref">1&lt;/a>&lt;/sup>.&lt;/p>
 &lt;p>I&amp;rsquo;d maintained small Linux server installations for many years, and am happy enough setting up postfix or nginx, but I&amp;rsquo;d never really used Linux as a desktop environment. I wanted to use a lightweight XMonad setup rather than a stock distro desktop installation, which meant having to find out about a lot of things that would otherwise be taken care of automatically, but the result is that I have a simpler system and also a better understanding of how it actually works.&lt;/p>
 &lt;p>&lt;img src="xmonad-desktop.jpg" alt="XMonad up and running">&lt;/p>
 &lt;p>This article describes the installation process, things I discovered along the way, and how I got to where I wanted to be (or near enough).&lt;/p>
@@ -259,7 +259,7 @@ iface lo inet loopback
 &lt;p>To create a DHCP configured ethernet connection&lt;/p>
 &lt;pre>&lt;code class="language-shell-session">$ nmcli connection add conn-name WiredHome type ethernet autoconnect yes
 &lt;/code>&lt;/pre>
-&lt;p>To list available WIFI connections (&amp;lsquo;list&amp;rsquo; is optional)&lt;/p>
+&lt;p>To list available WIFI connections (&amp;rsquo;list&amp;rsquo; is optional)&lt;/p>
 &lt;pre>&lt;code class="language-shell-session">$ nmcli device wifi list
 &lt;/code>&lt;/pre>
 &lt;p>To create a new WIFI connection (creates a new connection each time)&lt;/p>
@@ -392,44 +392,44 @@ $ sudo apt install imagemagick
 &lt;p>Working with XMonad is much nicer, particularly for programming, where a tiling window manager comes into its own. It&amp;rsquo;s easy to fire up a terminal next to or below your current window without losing focus of what you were looking at before, whether it&amp;rsquo;s a browser page or something in your editor. Working with multiple desktops and shunting windows between them quickly becomes a normal part of your workflow and there&amp;rsquo;s no clutter taking up screen space unnecessarily. It&amp;rsquo;s all super fast, without distractions such as animations, notification bars and so on. Since I haven&amp;rsquo;t configured &lt;code>mbsync&lt;/code> to pull down mail automatically, I also find that I now prefer to only read email when I choose, so there are no push notifications in the system at all and thus no interruptions when I&amp;rsquo;m working on something.&lt;/p>
 &lt;p>I can&amp;rsquo;t really come up with anything I need that is seriously missing on Linux. Some things, like hotplugging cameras and downloading images is slicker on OSX, but that&amp;rsquo;s more an issue with my minimal setup than Linux in general &amp;ndash; a standard distro installation would probably be better at this kind of thing. OSX has nicer fonts (Chinese sometimes mixes fonts and looks a bit rough in my terminal) but I&amp;rsquo;m still hoping to make improvements on that front.&lt;/p>
 &lt;p>I hope someone finds something useful here. If anyone has any suggestions for things I might be missing, please let me know.&lt;/p>
-&lt;section class="footnotes" role="doc-endnotes">
+&lt;div class="footnotes" role="doc-endnotes">
 &lt;hr>
 &lt;ol>
-&lt;li id="fn:1" role="doc-endnote">
+&lt;li id="fn:1">
 &lt;p>There&amp;rsquo;s nothing specific to the P50 in this article. It&amp;rsquo;s quite a chunky, powerful machine. It has an Nvidia graphics card as well as the on-board Intel card and this is one area where Linux is a bit of a headache. Support for dual-graphics card laptops on Linux isn&amp;rsquo;t great. The laptop screen runs fine using the Intel card, but there are some display issues if I use an external monitor with it. If I switch to the NVidia card exclusively it works fine but this requires a reboot and a BIOS switch. I haven&amp;rsquo;t tried using NVidia&amp;rsquo;s drivers or optimising the setup for switching between the cards yet. There are tools for this but it seems like a bit of a minefield and I&amp;rsquo;m happy enough with it for now. This will improve in future versions, but if you don&amp;rsquo;t need high-performance graphics then you might be better picking a machine with a single card.&amp;#160;&lt;a href="#fnref:1" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:2" role="doc-endnote">
+&lt;li id="fn:2">
 &lt;p>My initial motivation for the switch to Arch Linux was to have a system with a newer kernel and &lt;code>xorg&lt;/code> packages (1.19+) which had better support for Nvidia hardware and dual graphics cards. Any concerns I might have had about stability didn&amp;rsquo;t last long. I&amp;rsquo;ve had very few issues and the documentation is great.&amp;#160;&lt;a href="#fnref:2" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:3" role="doc-endnote">
+&lt;li id="fn:3">
 &lt;p>There is a timeout configured somewhere which I changed the first time I ran into the problem, but I can&amp;rsquo;t find the file anymore. In any case it doesn&amp;rsquo;t matter once the ethernet settings have been removed from &lt;code>/etc/network/interfaces&lt;/code>.&amp;#160;&lt;a href="#fnref:3" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:4" role="doc-endnote">
+&lt;li id="fn:4">
 &lt;p>NetworkManager can be integrated with gnome keyring, using a &lt;a href="https://developer.gnome.org/NetworkManager/stable/gdbus-org.freedesktop.NetworkManager.SecretAgent.html">&lt;code>SecretAgent&lt;/code>&lt;/a> service. Removing the &lt;code>psk&lt;/code> and setting &lt;code>psk-flags=1&lt;/code> in the connection file means a user secret agent will be asked for the password (see &lt;code>man nm-settings&lt;/code>). The &lt;code>nm-applet&lt;/code> application from the package &lt;code>network-manager-gnome&lt;/code> implements the required service interface. It will ask the user for the password on demand and store it for late use in the keyring. If you don&amp;rsquo;t install this, a workaround is to remove the &lt;code>psk&lt;/code> entry from the connection file and get &lt;code>nmcli&lt;/code> to ask you to enter the password: &lt;code>nmcli --ask connection up Cafe&lt;/code>. I also had a go at &lt;a href="https://github.com/tekul/nm-agent">writing my own SecretAgent&lt;/a> to try out the Haskell &lt;code>dbus&lt;/code> and &lt;code>gnome-keyring&lt;/code> libraries.&amp;#160;&lt;a href="#fnref:4" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:5" role="doc-endnote">
+&lt;li id="fn:5">
 &lt;p>There is a tool called &lt;code>pam-auth-update&lt;/code> which adds (or removes) the gnome keyring entry automatically. I guess it only adds the password entry since I&amp;rsquo;m using the console rather than a standard gnome setup.&amp;#160;&lt;a href="#fnref:5" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:6" role="doc-endnote">
+&lt;li id="fn:6">
 &lt;p>Setting the PAM stuff up seems quite temperamental and I had some problems. For example, the keyring daemon would be started but the keyring wouldn&amp;rsquo;t be unlocked on login and I would still be prompted for my password when it was needed. So far, I can also only get &lt;code>secret-tool&lt;/code> to work from within X-Windows.&amp;#160;&lt;a href="#fnref:6" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:7" role="doc-endnote">
+&lt;li id="fn:7">
 &lt;p>Note that the mutt/email articles in his blog are out of date compared to the current setup.&amp;#160;&lt;a href="#fnref:7" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:8" role="doc-endnote">
+&lt;li id="fn:8">
 &lt;p>&lt;code>msmtp&lt;/code> is supposed to integrate directly with the keyring but I couldn&amp;rsquo;t get it to work. In any case it makes more sense to share the same keyring entry between the two. The &lt;code>passwordeval&lt;/code> option enables this. It fails without the &lt;code>awk 1&lt;/code>, probably because it doesn&amp;rsquo;t write out the required newline.&amp;#160;&lt;a href="#fnref:8" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:9" role="doc-endnote">
+&lt;li id="fn:9">
 &lt;p>The default setup sources the files in &lt;code>/etc/X11/Xsession.d&lt;/code> and ends up by running the script &lt;code>/usr/bin/x-session-manager&lt;/code> which starts xmonad. For more information on the startup sequence, see the &lt;code>startx&lt;/code> man page.&amp;#160;&lt;a href="#fnref:9" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:10" role="doc-endnote">
+&lt;li id="fn:10">
 &lt;p>Details of fonts and other customizations for urxvt can be found in the &lt;a href="https://github.com/tekul/dotfiles/blob/master/Xdefaults">.Xdefaults file&lt;/a>.&amp;#160;&lt;a href="#fnref:10" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:11" role="doc-endnote">
+&lt;li id="fn:11">
 &lt;p>This is how I found out about &lt;code>cmus&lt;/code>, for example. I think it was &lt;a href="https://github.com/ssh0/dotfiles">in this repo&lt;/a> which also has quite a sophisticated Xmonad setup.&amp;#160;&lt;a href="#fnref:11" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
 &lt;/ol>
-&lt;/section></description></item><item><title>OAuth2 and OpenID Connect in Haskell</title><link>https://broch.tech/posts/oauth2-openid-connect-haskell/</link><pubDate>Mon, 02 May 2016 00:00:00 +0000</pubDate><guid>https://broch.tech/posts/oauth2-openid-connect-haskell/</guid><description>&lt;p>I&amp;rsquo;ve been working for a while on an implementation of the OpenID Connect specification. Since it was something I already knew quite a bit about from my previous job, it seemed like a good idea for a &amp;ldquo;real-world&amp;rdquo; Haskell project. The result is a project called &amp;ldquo;Broch&amp;rdquo; &lt;sup id="fnref:1">&lt;a href="#fn:1" class="footnote-ref" role="doc-noteref">1&lt;/a>&lt;/sup>, which is an OpenID Connect identity provider. Features include&lt;/p>
+&lt;/div></description></item><item><title>OAuth2 and OpenID Connect in Haskell</title><link>https://broch.tech/posts/oauth2-openid-connect-haskell/</link><pubDate>Mon, 02 May 2016 00:00:00 +0000</pubDate><guid>https://broch.tech/posts/oauth2-openid-connect-haskell/</guid><description>&lt;p>I&amp;rsquo;ve been working for a while on an implementation of the OpenID Connect specification. Since it was something I already knew quite a bit about from my previous job, it seemed like a good idea for a &amp;ldquo;real-world&amp;rdquo; Haskell project. The result is a project called &amp;ldquo;Broch&amp;rdquo; &lt;sup id="fnref:1">&lt;a href="#fn:1" class="footnote-ref" role="doc-noteref">1&lt;/a>&lt;/sup>, which is an OpenID Connect identity provider. Features include&lt;/p>
 &lt;ul>
 &lt;li>OAuth2 flows
 &lt;ul>
@@ -619,38 +619,38 @@ $ curl -H &amp;quot;Accept: application/json&amp;quot; -H &amp;quot;Authorizatio
 &lt;p>This was a recurring theme &amp;ndash; data types written to match the specification would in turn drive the development and ensure that all the corner cases had been dealt with.&lt;/p>
 &lt;h2 id="future-work">Future Work&lt;/h2>
 &lt;p>Broch implements most of the features for an OpenID Connect Provider required by the certification programme &lt;sup id="fnref:9">&lt;a href="#fn:9" class="footnote-ref" role="doc-noteref">9&lt;/a>&lt;/sup>. Work on additional features is ongoing. The current aim is to develop an opinionated but customizable solution for authentication based on OpenID Connect, rather than an identity management solution which does &lt;em>everything&lt;/em>. Even so, a production-ready solution requires a lot more than simple spec conformance. Suggestions for future development and also improvements to the current code are welcome.&lt;/p>
-&lt;section class="footnotes" role="doc-endnotes">
+&lt;div class="footnotes" role="doc-endnotes">
 &lt;hr>
 &lt;ol>
-&lt;li id="fn:1" role="doc-endnote">
+&lt;li id="fn:1">
 &lt;p>This follows from the contrived acronym &amp;ldquo;Basic Realization of OpenID Connect in Haskell&amp;rdquo;, but I chose the name first and the acronym later. If someone can think of a better one, please let me know. Brochs are tall, round iron age buildings and I enjoyed playing in the ruins of some of them when I was young. They are of simple design, solidly engineered and secure. All good goals for an identity management system to aspire to, even an implementation of OAuth2/OpenID Connect.&amp;#160;&lt;a href="#fnref:1" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:2" role="doc-endnote">
+&lt;li id="fn:2">
 &lt;p>JWTs are implemented in a separate project &lt;a href="http://hackage.haskell.org/package/jose-jwt">&lt;code>jose-jwt&lt;/code>&lt;/a>.&amp;#160;&lt;a href="#fnref:2" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:3" role="doc-endnote">
+&lt;li id="fn:3">
 &lt;p>Key rotation is described in the &lt;a href="http://openid.net/specs/openid-connect-core-1_0.html#RotateSigKeys">&lt;code>openid-connect-core&lt;/code>&lt;/a> spec.&amp;#160;&lt;a href="#fnref:3" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:4" role="doc-endnote">
+&lt;li id="fn:4">
 &lt;p>OpenID Connect defines a specific set of &lt;a href="http://openid.net/specs/openid-connect-core-1_0.html#Claims">claims&lt;/a>, which unfortunately aren&amp;rsquo;t directly compatible with SCIM.&amp;#160;&lt;a href="#fnref:4" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:5" role="doc-endnote">
+&lt;li id="fn:5">
 &lt;p>The aim is to build a full implementation of &lt;a href="http://www.simplecloud.info/">the SCIM 2 spec&lt;/a>, but this is a work in progress, and SCIM may be overkill for many use cases.&amp;#160;&lt;a href="#fnref:5" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:6" role="doc-endnote">
+&lt;li id="fn:6">
 &lt;p>See the &lt;a href="http://openid.net/specs/openid-connect-core-1_0.html#CodeFlowSteps">spec&lt;/a> for a more in-depth description. The only thing that will usually vary in this request is the &lt;code>state&lt;/code> parameter which is generated by the client.&amp;#160;&lt;a href="#fnref:6" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:7" role="doc-endnote">
+&lt;li id="fn:7">
 &lt;p>Functional programmers enjoy making fun of other languages and their inadequacies in this department (just mention &amp;ldquo;dependency injection&amp;rdquo; and watch the reaction), but concrete examples of how to build a Haskell server with a pluggable configuration are thin on the ground. For a beginner it&amp;rsquo;s not clear where to start. If you&amp;rsquo;re using a framework like Yesod, then it uses typeclasses to implement different functionality you might want in your application, and you can override specific functions if you wish. However, I&amp;rsquo;d already decided I didn&amp;rsquo;t want to tie the project to any specific framework and I wasn&amp;rsquo;t overly keen on using typeclasses for everything. The approach I settled on was inspired by this &lt;a href="http://stackoverflow.com/a/14329487/241990">Stack Overflow answer&lt;/a>.&amp;#160;&lt;a href="#fnref:7" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:8" role="doc-endnote">
+&lt;li id="fn:8">
 &lt;p>The spec actually says that 500 errors should be returned as a redirect to the client, but that can be handled by a single catch in the handler code.&amp;#160;&lt;a href="#fnref:8" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:9" role="doc-endnote">
+&lt;li id="fn:9">
 &lt;p>A deployed server has been tested successfully against the certification suite. Some optional features aren&amp;rsquo;t implemented yet. More information on certification can be found on the &lt;a href="http://openid.net/certification/">OpenID site&lt;/a>.&amp;#160;&lt;a href="#fnref:9" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
 &lt;/ol>
-&lt;/section></description></item><item><title>Build Your Own Haskell Web Framework on WAI</title><link>https://broch.tech/posts/build-your-own-wai-framework/</link><pubDate>Sun, 19 Apr 2015 00:00:00 +0000</pubDate><guid>https://broch.tech/posts/build-your-own-wai-framework/</guid><description>&lt;p>This article shows how you can build on top of the basic request/response handling functionality provided by &lt;a href="http://hackage.haskell.org/package/wai">WAI&lt;/a> and the &lt;a href="http://hackage.haskell.org/package/warp">Warp server&lt;/a>, to support some of the requirements you might have in a typical web application. The content is mostly gleaned from my research into the code of several WAI-based web frameworks to try to understand how they work. Building a web application was one of the things I tackled when I didn&amp;rsquo;t really know Haskell well enough, so hopefully this will be useful if you&amp;rsquo;re at a similar stage and would like to understand what&amp;rsquo;s going on in a bit more depth. I&amp;rsquo;ll outline some of the features these frameworks add, build a similar (but simplified) implementation, and also provide links to the source code of some real-world frameworks built on WAI (such as &lt;a href="http://hackage.haskell.org/package/scotty">Scotty&lt;/a>, &lt;a href="http://www.spock.li/">Spock&lt;/a> and &lt;a href="http://www.yesodweb.com/">Yesod&lt;/a>) for comparison.&lt;/p>
+&lt;/div></description></item><item><title>Build Your Own Haskell Web Framework on WAI</title><link>https://broch.tech/posts/build-your-own-wai-framework/</link><pubDate>Sun, 19 Apr 2015 00:00:00 +0000</pubDate><guid>https://broch.tech/posts/build-your-own-wai-framework/</guid><description>&lt;p>This article shows how you can build on top of the basic request/response handling functionality provided by &lt;a href="http://hackage.haskell.org/package/wai">WAI&lt;/a> and the &lt;a href="http://hackage.haskell.org/package/warp">Warp server&lt;/a>, to support some of the requirements you might have in a typical web application. The content is mostly gleaned from my research into the code of several WAI-based web frameworks to try to understand how they work. Building a web application was one of the things I tackled when I didn&amp;rsquo;t really know Haskell well enough, so hopefully this will be useful if you&amp;rsquo;re at a similar stage and would like to understand what&amp;rsquo;s going on in a bit more depth. I&amp;rsquo;ll outline some of the features these frameworks add, build a similar (but simplified) implementation, and also provide links to the source code of some real-world frameworks built on WAI (such as &lt;a href="http://hackage.haskell.org/package/scotty">Scotty&lt;/a>, &lt;a href="http://www.spock.li/">Spock&lt;/a> and &lt;a href="http://www.yesodweb.com/">Yesod&lt;/a>) for comparison.&lt;/p>
 &lt;p>Whether you need to use an additional framework on top of WAI will very much depend on your requirements, how complicated your application is and whether you want to track the extra dependencies in your project. Frameworks cater for general cases (making the types more complex for a beginner) and they have a lot of features. You should certainly try out something like Spock or Scotty as they are easy to get started with. For a simple application, or one where you need finer control over handling requests, you might then consider a customized approach. On the other hand, you might overlook something important which the framework authors didn&amp;rsquo;t &lt;sup id="fnref:1">&lt;a href="#fn:1" class="footnote-ref" role="doc-noteref">1&lt;/a>&lt;/sup> &amp;ndash; the code in this article is only meant to be a rough outline. If you &lt;em>do&lt;/em> decide to &amp;ldquo;build your own,&amp;rdquo; please think hard before releasing it to Hackage. There are more than enough WAI frameworks out there already &lt;sup id="fnref:2">&lt;a href="#fn:2" class="footnote-ref" role="doc-noteref">2&lt;/a>&lt;/sup>.&lt;/p>
 &lt;h3 id="basic-wai">Basic WAI&lt;/h3>
 &lt;p>WAI (&amp;ldquo;web application interface&amp;rdquo;) is a Haskell HTTP request/response API. Theoretically it is server-agnostic but in practice it is really only implemented by the warp server.&lt;/p>
@@ -815,54 +815,54 @@ routerToApplication route req respond =
 &lt;/code>&lt;/pre>
 &lt;h2 id="conclusion">Conclusion&lt;/h2>
 &lt;p>Even though WAI is not really a standard web interface supported by multiple servers, it &lt;em>is&lt;/em> common to multiple frameworks so an understanding WAI and Warp is useful if you are likely to be developing Haskell web applications.&lt;/p>
-&lt;p>In this article we&amp;rsquo;ve built a simple set of functions with which we can write web handlers which would look quite similar to those of a framework like Scotty, and you should now hopefully have a clearer idea of how they work. The code is available from the accompanying samples repository &lt;a href="https://github.com/broch/brochio-samples/blob/byowai/ByoWai.hs">on github&lt;/a>, on the &lt;code>byowai&lt;/code> branch. The branch commit history closely follows the structure of the article and should compile at each stage. For a more complex example, you can also see this kind of code in use in a project I&amp;rsquo;ve been working on which is an implementation of the &lt;a href="http://openid.net/developers/specs/">OpenID Connect specification&lt;/a> in Haskell &lt;sup id="fnref:15">&lt;a href="#fn:15" class="footnote-ref" role="doc-noteref">15&lt;/a>&lt;/sup>. I&amp;rsquo;ll hopefully find time to write up more articles on this topic as the development proceeds.&lt;/p>
-&lt;section class="footnotes" role="doc-endnotes">
+&lt;p>In this article we&amp;rsquo;ve built a simple set of functions with which we can write web handlers which would look quite similar to those of a framework like Scotty, and you should now hopefully have a clearer idea of how they work. The full code can be downloaded &lt;a href="BuildYourOwnWai.hs">here&lt;/a>. For a more complex example, you can also see this kind of code in use in a project I&amp;rsquo;ve been working on which is an implementation of the &lt;a href="http://openid.net/developers/specs/">OpenID Connect specification&lt;/a> in Haskell &lt;sup id="fnref:15">&lt;a href="#fn:15" class="footnote-ref" role="doc-noteref">15&lt;/a>&lt;/sup>. I&amp;rsquo;ll hopefully find time to write up more articles on this topic as the development proceeds.&lt;/p>
+&lt;div class="footnotes" role="doc-endnotes">
 &lt;hr>
 &lt;ol>
-&lt;li id="fn:1" role="doc-endnote">
+&lt;li id="fn:1">
 &lt;p>Warp doesn&amp;rsquo;t automatically limit the request size, for example, so someone can crash your application by sending a very large request. For example, you can use the curl command &lt;code>curl -v --data-urlencode 'username@my_giant_file.txt' localhost:3000/login&lt;/code> to send a large file as a parameter. See also, Yesod&amp;rsquo;s &lt;code>maximumContentLength&lt;/code> setting, which it uses to &lt;a href="https://github.com/yesodweb/yesod/blob/yesod-core/1.4.6/yesod-core/Yesod/Core/Internal/Request.hs#L55">limit the request body size&lt;/a>.&amp;#160;&lt;a href="#fnref:1" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:2" role="doc-endnote">
+&lt;li id="fn:2">
 &lt;p>&lt;a href="http://hackage.haskell.org/package/scotty">Scotty&lt;/a>, &lt;a href="http://www.yesodweb.com/">Yesod&lt;/a>, &lt;a href="http://hackage.haskell.org/package/hails">Hails&lt;/a>, &lt;a href="http://hackage.haskell.org/package/apiary">Apiary&lt;/a>, &lt;a href="http://www.spock.li/">Spock&lt;/a>, &lt;a href="http://hackage.haskell.org/package/Wheb">Wheb&lt;/a>, &lt;a href="http://hackage.haskell.org/package/simple">Simple&lt;/a>. For a more complete list, you can look through &lt;a href="http://packdeps.haskellers.com/reverse/warp">Warp&amp;rsquo;s reverse dependencies&lt;/a>.&amp;#160;&lt;a href="#fnref:2" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:3" role="doc-endnote">
+&lt;li id="fn:3">
 &lt;p>For a good overview of WAI, see the &lt;a href="http://www.yesodweb.com/book-1.4/web-application-interface">Yesod Book&lt;/a>.&amp;#160;&lt;a href="#fnref:3" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:4" role="doc-endnote">
+&lt;li id="fn:4">
 &lt;p>The &lt;a href="https://hackage.haskell.org/package/mtl-2.1.2/docs/Control-Monad-RWS-Strict.html#g:2">RWST&lt;/a> monad transformer is another possibility and is used by the &lt;a href="https://github.com/agrafix/Spock/blob/0.7.5.1/src/Web/Spock/Internal/Wire.hs#L89">Spock Framework&lt;/a>. In this case the &amp;ldquo;writer&amp;rdquo; part of the monad is ignored.&amp;#160;&lt;a href="#fnref:4" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:5" role="doc-endnote">
+&lt;li id="fn:5">
 &lt;p>For an example which builds its own monad from scratch, see Apiary&amp;rsquo;s &lt;a href="http://hackage.haskell.org/package/apiary-1.2.0/docs/src/Control-Monad-Apiary-Action-Internal.html#ActionT">&lt;code>ActionT&lt;/code>&lt;/a> or Simple&amp;rsquo;s &lt;a href="https://github.com/alevy/simple/blob/v0.9.0.0/simple/src/Web/Simple/Controller/Trans.hs#L51">&lt;code>ControllerT&lt;/code>&lt;/a>.&amp;#160;&lt;a href="#fnref:5" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:6" role="doc-endnote">
+&lt;li id="fn:6">
 &lt;p>You&amp;rsquo;ll see these extra request and response data options in Scotty&amp;rsquo;s &lt;a href="https://github.com/scotty-web/scotty/blob/0.9.0/Web/Scotty/Internal/Types.hs#L108">&lt;code>ActionEnv&lt;/code> and &lt;code>Content&lt;/code>&lt;/a> types, for example.&amp;#160;&lt;a href="#fnref:6" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:7" role="doc-endnote">
+&lt;li id="fn:7">
 &lt;p>If we look at the type signatures for the &lt;code>redirect&lt;/code> functions in existing frameworks, the handler monad is parameterized with an arbitrary type. In Scotty, for example, the type is &lt;code>redirect :: Text -&amp;gt; ActionM a&lt;/code> so we can immediately deduce that &lt;code>redirect&lt;/code> &lt;em>must&lt;/em> short-circuit since it can&amp;rsquo;t return an arbitrary value.&amp;#160;&lt;a href="#fnref:7" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:8" role="doc-endnote">
+&lt;li id="fn:8">
 &lt;p>Scotty &lt;a href="https://github.com/scotty-web/scotty/blob/0.9.0/Web/Scotty/Action.hs#L273">doesn&amp;rsquo;t complete the response&lt;/a> when you write the content using a function like &lt;code>text&lt;/code> or &lt;code>json&lt;/code> whereas &lt;a href="https://github.com/agrafix/Spock/blob/0.7.5.1/src/Web/Spock/Internal/CoreAction.hs#L210">Spock does&lt;/a>. A list of Yesod handler functions which short-circuit can be found in the &lt;a href="http://www.yesodweb.com/book-1.4/routing-and-handlers">Routing and Handlers&lt;/a> chapter of the Yesod book.&amp;#160;&lt;a href="#fnref:8" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:9" role="doc-endnote">
+&lt;li id="fn:9">
 &lt;p>&lt;code>EitherT&lt;/code> can be found in the &lt;a href="http://hackage.haskell.org/package/either">&lt;code>either&lt;/code>&lt;/a> package and is also re-exported by the &lt;code>errors&lt;/code> package.&amp;#160;&lt;a href="#fnref:9" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:10" role="doc-endnote">
+&lt;li id="fn:10">
 &lt;p>You may notice that &lt;code>ExceptT&lt;/code> is &lt;a href="https://github.com/scotty-web/scotty/blob/master/Web/Scotty/Internal/Types.hs#L137">used in practice&lt;/a> instead of &lt;code>EitherT&lt;/code>. However, this requires version 2.2.1 or later of the &lt;code>mtl&lt;/code> library, which in turn requires the use of &lt;code>transformers 0.4.*&lt;/code>. GHC 7.8 comes with transformers 0.3 so you can end up with conflicting versions in your project if it depends on GHC and cabal will complain. &lt;code>EitherT&lt;/code> does the same job, more or less, so we stick with that for now.&amp;#160;&lt;a href="#fnref:10" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:11" role="doc-endnote">
+&lt;li id="fn:11">
 &lt;p>It&amp;rsquo;s also confusing that the naming conventions often reinforce this. For example, Scotty&amp;rsquo;s &lt;a href="https://github.com/scotty-web/scotty/blob/0.9.0/Web/Scotty/Internal/Types.hs#L76">&lt;code>ActionError&lt;/code>&lt;/a> type deals with both redirects and errors.&amp;#160;&lt;a href="#fnref:11" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:12" role="doc-endnote">
+&lt;li id="fn:12">
 &lt;p>For example, we might want to report an error if sensitive data like a password is sent in a URL. We couldn&amp;rsquo;t do this using Scotty&amp;rsquo;s &lt;code>param&lt;/code> function, for instance.&amp;#160;&lt;a href="#fnref:12" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:13" role="doc-endnote">
+&lt;li id="fn:13">
 &lt;p>Scotty &lt;a href="https://github.com/scotty-web/scotty/blob/0.9.0/Web/Scotty/Route.hs#L137">reads the request body&lt;/a> and stores it along with the other request data so that it can be accessed more than once.&amp;#160;&lt;a href="#fnref:13" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:14" role="doc-endnote">
+&lt;li id="fn:14">
 &lt;p>The &lt;a href="http://hackage.haskell.org/package/warp-3.0.5/docs/Network-Wai-Handler-Warp.html#v:setOnExceptionResponse">&lt;code>setOnExceptionResponse&lt;/code>&lt;/a> setting can be used for customization. The exception is caught and the response sent in the &lt;a href="https://github.com/yesodweb/wai/blob/warp/3.0.5/warp/Network/Wai/Handler/Warp/Run.hs#L282">&lt;code>serveConnection&lt;/code>&lt;/a> function. The exception is then re-thrown to the &lt;code>fork&lt;/code> function which &lt;a href="https://github.com/yesodweb/wai/blob/warp/3.0.5/warp/Network/Wai/Handler/Warp/Run.hs#L256">calls the exception handler&lt;/a> configured with &lt;a href="http://hackage.haskell.org/package/warp-3.0.5/docs/Network-Wai-Handler-Warp.html#v:setOnException">&lt;code>setOnException&lt;/code>&lt;/a> and cleans up resources.&amp;#160;&lt;a href="#fnref:14" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
-&lt;li id="fn:15" role="doc-endnote">
+&lt;li id="fn:15">
 &lt;p>The project is also on &lt;a href="https://github.com/tekul/broch">github&lt;/a>. It&amp;rsquo;s a work in progress but also includes session handling, for example.&amp;#160;&lt;a href="#fnref:15" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
 &lt;/li>
 &lt;/ol>
-&lt;/section></description></item></channel></rss>
+&lt;/div></description></item></channel></rss>

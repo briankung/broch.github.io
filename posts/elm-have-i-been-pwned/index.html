@@ -1,72 +1,11 @@
-<!doctype html><html lang=en>
-<head>
-<title>Checking Password Strength in Elm, Part 2: Have I Been Pwned API</title>
-<meta http-equiv=content-type content="text/html" charset=utf-8>
-<meta name=viewport content="width=device-width,initial-scale=1">
-<meta name=description content="Checking for compromised passwords in Elm using the &#34;Have I been Pwned&#34; API.">
-<link rel=stylesheet href="/css/main.min.9f61d89855d8bb3b8b3d01deb7e971226ba56b7dc56d61ee90a1ba26253a02be.css" integrity="sha256-n2HYmFXYuzuLPQHet+lxImula33FbWHukKG6JiU6Ar4=">
-<link rel=icon type=image/svg+xml href=/images/broch.svg>
-<link rel=stylesheet href=https://rsms.me/inter/inter.css>
-<script src=/js/prism.js></script>
-</head>
-<body>
-<nav class="bg-white mb-1 shadow">
-<div class="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
-<div class="relative flex justify-between h-20">
-<div class="absolute inset-y-0 left-0 flex items-center sm:hidden">
-<button id=menu-button type=button class="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-red-600" aria-controls=mobile-menu aria-expanded=false>
-<span class=sr-only>Open main menu</span><svg id="open-menu-icon" class="block h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentcolor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg><svg id="close-menu-icon" class="hidden h-6 w-6" xmlns="htp://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentcolor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18 18 6M6 6l12 12"/></svg>
-</button>
-</div>
-<div class="flex-1 flex items-center justify-center sm:items-stretch sm:justify-start">
-<div class="flex-shrink-0 flex items-center">
-<a href=/>
-<img class="hidden lg:block h-14 w-auto" src=/images/broch-logo-text.svg alt=Broch>
-<img class="block lg:hidden h-14 w-auto" src=/images/broch.svg alt=Broch>
-</a>
-</div>
-<div class="hidden sm:ml-9 sm:flex sm:space-x-8">
-<a class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-lg font-medium" href=/ title>Home</a>
-<a class="border-red-600 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-lg font-medium" href=/posts/ title=Blog>Blog</a>
-</div>
-</div>
-<div class="absolute inset-y-0 right-0 flex items-center pr-2 sm:static sm:inset-auto sm:ml-6 sm:pr-0">
-<a href=/index.xml class="bg-white p-1 rounded-full text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-<span class=sr-only>RSS Feed</span><svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentcolor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 5c7.18.0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z"/></svg>
-</a>
-</dev>
-</div>
-</div>
-<div class=hidden id=mobile-menu>
-<div class="pt-2 pb-4 space-y-1">
-<a class="border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700 block pl-3 pr-4 py-2 border-l-4 text-base font-medium" href=/ title>Home</a>
-<a class="bg-red-50 border-red-600 text-red-900 block pl-3 pr-4 py-2 border-l-4 text-base font-medium" href=/posts/ title=Blog>Blog</a>
-</div>
-</div>
-</nav>
-<script>var menu_open=!1,menu_button=document.getElementById("menu-button"),menu=document.getElementById("mobile-menu"),open_icon=document.getElementById("open-menu-icon"),close_icon=document.getElementById("close-menu-icon");menu_button.addEventListener("click",function(){menu_open=!menu_open,menu_open?(menu.className="block sm:hidden",close_icon.className.baseVal="block h-6 w-6",open_icon.className.baseVal="hidden h-6 w-6"):(menu.className="hidden",open_icon.className.baseVal="block h-6 w-6",close_icon.className.baseVal="hidden h-6 w-6")})</script>
-<div class="w-full max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
-<main>
-<article class="mx-auto prose prose-lg">
-<h1>Checking Password Strength in Elm, Part 2: Have I Been Pwned API</h1>
-<p class="block flex display-between text-gray-500 italic">
-March 5, 2018
-<span class=ml-3>(Updated, April 18, 2021)</span>
-</p>
-<p>In the <a href=/posts/elm-zxcvbn>Part 1</a>, we used the Javascript library Zxcvn to check the strength of a password locally. Now we&rsquo;ll extend the code to check the chosen password against the huge database maintained by <a href=https://haveibeenpwned.com>Have I been pwned?</a>. The code for this part is similar, but instead of decoding the result of a call to Javascript to obtain our data, we make an HTTP request and decode the response.</p>
-<p>The full code for both parts can be found <a href=https://github.com/tekul/elm-password-check>on github</a>.</p>
-<div class="w-full px-10 py-10 border rounded-md shadow mx-auto sm:w-2/3">
-<div id=app></div>
-</div>
-<script src=/posts/elm-zxcvbn/app.js></script>
-<script>var app=Elm.Main.init({node:document.getElementById('app'),flags:{}});app.ports.checkPassword.subscribe(function(a){var b=zxcvbn(a);app.ports.passwordChecked.send(b)})</script>
-<script async src=/js/zxcvbn.js></script>
-<h2 id=using-the-password-api>Using the Password API</h2>
-<p>The API requires that we pass the first 5 hexadecimal characters of the SHA-1 hash of our password:</p>
-<pre><code class=language-plain>GET https://api.pwnedpasswords.com/range/{first 5 hash chars}
-</code></pre>
-<p>and it returns a list of all the suffixes of hashes with this prefix, along with the number of times each password has been found, with a colon separator <sup id=fnref:1><a href=#fn:1 class=footnote-ref role=doc-noteref>1</a></sup>. For example, if we enter the very common password &ldquo;password1&rdquo;, the SHA-1 is <code>e38ad214943daad1d64c102faec29de4afe9da3d</code>. If we sent a request using the <code>curl</code> command:</p>
-<pre><code class=language-shell-session>$ curl https://api.pwnedpasswords.com/range/e38ad
+<!doctype html><html lang=en><head><title>Checking Password Strength in Elm, Part 2: Have I Been Pwned API</title><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=description content="Checking for compromised passwords in Elm using the &#34;Have I been Pwned&#34; API."><link rel=stylesheet href="/css/main.min.e5e3c9f3b6898f07b5fcdc75241740fe9565873494c47e1eae722ef2ff3c322b.css" integrity="sha256-5ePJ87aJjwe1/Nx1JBdA/pVlhzSUxH4ernIu8v88Mis="><link rel=icon type=image/svg+xml href=/images/broch.svg><link rel=stylesheet href=https://rsms.me/inter/inter.css><script src=/js/prism.js></script></head><body><nav class="bg-white mb-1 shadow"><div class="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8"><div class="relative flex justify-between h-20"><div class="absolute inset-y-0 left-0 flex items-center sm:hidden"><button id=menu-button type=button class="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-red-600" aria-controls=mobile-menu aria-expanded=false>
+<span class=sr-only>Open main menu</span><svg id="open-menu-icon" class="block h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentcolor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg><svg id="close-menu-icon" class="hidden h-6 w-6" xmlns="htp://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentcolor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18 18 6M6 6l12 12"/></svg></button></div><div class="flex-1 flex items-center justify-center sm:items-stretch sm:justify-start"><div class="flex-shrink-0 flex items-center"><a href=/><img class="hidden lg:block h-14 w-auto" src=/images/broch-logo-text.svg alt=Broch>
+<img class="block lg:hidden h-14 w-auto" src=/images/broch.svg alt=Broch></a></div><div class="hidden sm:ml-9 sm:flex sm:space-x-8"><a class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-lg font-medium" href=/ title>Home</a>
+<a class="border-red-600 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-lg font-medium" href=/posts/ title=Blog>Blog</a></div></div><div class="absolute inset-y-0 right-0 flex items-center pr-2 sm:static sm:inset-auto sm:ml-6 sm:pr-0"><a href=/index.xml class="bg-white p-1 rounded-full text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"><span class=sr-only>RSS Feed</span><svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentcolor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 5c7.18.0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z"/></svg></a></dev></div></div><div class=hidden id=mobile-menu><div class="pt-2 pb-4 space-y-1"><a class="border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700 block pl-3 pr-4 py-2 border-l-4 text-base font-medium" href=/ title>Home</a>
+<a class="bg-red-50 border-red-600 text-red-900 block pl-3 pr-4 py-2 border-l-4 text-base font-medium" href=/posts/ title=Blog>Blog</a></div></div></nav><script>var menu_open=!1,menu_button=document.getElementById("menu-button"),menu=document.getElementById("mobile-menu"),open_icon=document.getElementById("open-menu-icon"),close_icon=document.getElementById("close-menu-icon");menu_button.addEventListener("click",function(){menu_open=!menu_open,menu_open?(menu.className="block sm:hidden",close_icon.className.baseVal="block h-6 w-6",open_icon.className.baseVal="hidden h-6 w-6"):(menu.className="hidden",open_icon.className.baseVal="block h-6 w-6",close_icon.className.baseVal="hidden h-6 w-6")})</script><div class="w-full max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8"><main><article class="mx-auto prose prose-lg"><h1>Checking Password Strength in Elm, Part 2: Have I Been Pwned API</h1><p class="block flex display-between text-gray-500 italic">March 5, 2018
+<span class=ml-3>(Updated, April 18, 2021)</span></p><p>In the <a href=/posts/elm-zxcvbn>Part 1</a>, we used the Javascript library Zxcvn to check the strength of a password locally. Now we&rsquo;ll extend the code to check the chosen password against the huge database maintained by <a href=https://haveibeenpwned.com>Have I been pwned?</a>. The code for this part is similar, but instead of decoding the result of a call to Javascript to obtain our data, we make an HTTP request and decode the response.</p><p>The full code for both parts can be found <a href=https://github.com/tekul/elm-password-check>on github</a>.</p><div class="w-full px-10 py-10 border rounded-md shadow mx-auto sm:w-2/3"><div id=app></div></div><script src=/posts/elm-zxcvbn/app.js></script>
+<script>var app=Elm.Main.init({node:document.getElementById("app"),flags:{}});app.ports.checkPassword.subscribe(function(e){var t=zxcvbn(e);app.ports.passwordChecked.send(t)})</script><script async src=/js/zxcvbn.js></script><h2 id=using-the-password-api>Using the Password API</h2><p>The API requires that we pass the first 5 hexadecimal characters of the SHA-1 hash of our password:</p><pre><code class=language-plain>GET https://api.pwnedpasswords.com/range/{first 5 hash chars}
+</code></pre><p>and it returns a list of all the suffixes of hashes with this prefix, along with the number of times each password has been found, with a colon separator <sup id=fnref:1><a href=#fn:1 class=footnote-ref role=doc-noteref>1</a></sup>. For example, if we enter the very common password &ldquo;password1&rdquo;, the SHA-1 is <code>e38ad214943daad1d64c102faec29de4afe9da3d</code>. If we sent a request using the <code>curl</code> command:</p><pre><code class=language-shell-session>$ curl https://api.pwnedpasswords.com/range/e38ad
 ...
 209CE6FC85F5F7B39B1FADE957076C018B7:2
 20ECFBB285A5C09DE3F6DE40C6CA9F6C894:2
@@ -76,38 +15,23 @@ March 5, 2018
 2245E23E0F38934B77332C823D186739509:3
 22615754CF7175ED94BDED305D7172FFF35:2
 ...
-</code></pre>
-<p>we can pick the remaining suffix (<code>214943daad1d64c102faec29de4afe9da3d</code>) out of the response and see that this password was found almost 2.5 million times! Definitely one to avoid.</p>
-<h2 id=calculating-the-sha-1>Calculating the SHA-1</h2>
-<p>The first thing we need to be able to do is calculate SHA-1 values. Fortunately, someone has already written an <a href=https://package.elm-lang.org/packages/TSFoster/elm-sha1/latest/>Elm package which does just that</a>.</p>
-<p>We write our own <code>sha1</code> function to make sure we are always using upper-case Hex values. The API used Hex encoding and thought it isn&rsquo;t case sensitive, the response is always upper-case and we&rsquo;re going to be comparing with those values.</p>
-<pre><code class=language-elm>sha1 : String -&gt; String
+</code></pre><p>we can pick the remaining suffix (<code>214943daad1d64c102faec29de4afe9da3d</code>) out of the response and see that this password was found almost 2.5 million times! Definitely one to avoid.</p><h2 id=calculating-the-sha-1>Calculating the SHA-1</h2><p>The first thing we need to be able to do is calculate SHA-1 values. Fortunately, someone has already written an <a href=https://package.elm-lang.org/packages/TSFoster/elm-sha1/latest/>Elm package which does just that</a>.</p><p>We write our own <code>sha1</code> function to make sure we are always using upper-case Hex values. The API used Hex encoding and thought it isn&rsquo;t case sensitive, the response is always upper-case and we&rsquo;re going to be comparing with those values.</p><pre><code class=language-elm>sha1 : String -&gt; String
 sha1 s =
     SHA1.fromString s
         |&gt; SHA1.toHex
         |&gt; String.toUpper
-</code></pre>
-<h2 id=making-the-request>Making The Request</h2>
-<p>This is very simple, using the standard <code>elm/http</code> package:</p>
-<pre><code class=language-elm>getPwnedMatches : String -&gt; Cmd Msg
+</code></pre><h2 id=making-the-request>Making The Request</h2><p>This is very simple, using the standard <code>elm/http</code> package:</p><pre><code class=language-elm>getPwnedMatches : String -&gt; Cmd Msg
 getPwnedMatches password =
     Http.get
         { url = &quot;https://api.pwnedpasswords.com/range/&quot; ++ String.left 5 (sha1 password)
         , expect = Http.expectString PwnedResults
         }
-</code></pre>
-<p>The <code>PwnedResults</code> msg is called when we get a response back from the API. So we need to add this to our <code>Msg</code> type:</p>
-<pre><code class=language-elm>type Msg
+</code></pre><p>The <code>PwnedResults</code> msg is called when we get a response back from the API. So we need to add this to our <code>Msg</code> type:</p><pre><code class=language-elm>type Msg
     = SetPassword String
     | ZxcvbnChecked Json.Value
     | CheckPwned
     | PwnedResults (Result Http.Error String)
-</code></pre>
-<p>There&rsquo;s also a <code>CheckPwned</code> message which is received when the user clicks the button to submit the form. That&rsquo;s when we send the request.</p>
-<h2 id=decoding-the-response>Decoding The Response</h2>
-<p>We don&rsquo;t use a JSON decoder here since the API returns a text response, as described above.</p>
-<p>The code to decode the response is (slightly simplified):</p>
-<pre><code class=language-elm>pwnedCountFromResponse : String -&gt; String -&gt; Maybe Int
+</code></pre><p>There&rsquo;s also a <code>CheckPwned</code> message which is received when the user clicks the button to submit the form. That&rsquo;s when we send the request.</p><h2 id=decoding-the-response>Decoding The Response</h2><p>We don&rsquo;t use a JSON decoder here since the API returns a text response, as described above.</p><p>The code to decode the response is (slightly simplified):</p><pre><code class=language-elm>pwnedCountFromResponse : String -&gt; String -&gt; Maybe Int
 pwnedCountFromResponse password response =
     let
         suffix =
@@ -118,22 +42,4 @@ pwnedCountFromResponse password response =
             |&gt; List.head
             |&gt; Maybe.map (String.dropLeft 36)
             |&gt; Maybe.andThen String.toInt
-</code></pre>
-<p>We find our SHA-1&rsquo;s suffix in the list (if it&rsquo;s there), drop the 36 characters up to and including the colon, and then convert the remainder to an integer. The count value is stored in the model and used to present a suitable message to the user.</p>
-<h1 id=conclusion>Conclusion</h1>
-<p>&ldquo;Have I Been Pwned?&rdquo; is a great resource for accessing information on data breaches (you can also search by your email or phone number). It can be used to complement the Zxcvbn but also has the benefit that it uses real-world data, so it is less likely to miss things that Zxcvbn might, due to language differences, keyboard layouts and so on.</p>
-<p>You might want to prevent a user from choosing a password which is found in HIBP if they are registering an account. Even if the password only has one or two matches, in a worst case scenario, your user may be reusing a password which is tied to their account in a data breach that is publicly available. Even if a password is completely random and theoretically unbreakable when hashed properly, it&rsquo;s useless once it&rsquo;s been compromised at a company which stored everything in plain text (and there have been plenty of those).</p>
-<p>How strict you are about password policy obviously depends on what the account is for. If you have serious security requirements then passwords alone probably aren&rsquo;t up to the job, no matter how strong they are, and an extra multi-factor authentication solution should be used.</p>
-<section class=footnotes role=doc-endnotes>
-<hr>
-<ol>
-<li id=fn:1 role=doc-endnote>
-<p>Note that a Hex encoded SHA-1 value is 40 characters long, so the suffixes we get back are 35 characters.&#160;<a href=#fnref:1 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p>
-</li>
-</ol>
-</section>
-</article>
-</main>
-</div>
-</body>
-</html>
+</code></pre><p>We find our SHA-1&rsquo;s suffix in the list (if it&rsquo;s there), drop the 36 characters up to and including the colon, and then convert the remainder to an integer. The count value is stored in the model and used to present a suitable message to the user.</p><h1 id=conclusion>Conclusion</h1><p>&ldquo;Have I Been Pwned?&rdquo; is a great resource for accessing information on data breaches (you can also search by your email or phone number). It can be used to complement the Zxcvbn but also has the benefit that it uses real-world data, so it is less likely to miss things that Zxcvbn might, due to language differences, keyboard layouts and so on.</p><p>You might want to prevent a user from choosing a password which is found in HIBP if they are registering an account. Even if the password only has one or two matches, in a worst case scenario, your user may be reusing a password which is tied to their account in a data breach that is publicly available. Even if a password is completely random and theoretically unbreakable when hashed properly, it&rsquo;s useless once it&rsquo;s been compromised at a company which stored everything in plain text (and there have been plenty of those).</p><p>How strict you are about password policy obviously depends on what the account is for. If you have serious security requirements then passwords alone probably aren&rsquo;t up to the job, no matter how strong they are, and an extra multi-factor authentication solution should be used.</p><div class=footnotes role=doc-endnotes><hr><ol><li id=fn:1><p>Note that a Hex encoded SHA-1 value is 40 characters long, so the suffixes we get back are 35 characters.&#160;<a href=#fnref:1 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p></li></ol></div></article></main></div></body></html>
