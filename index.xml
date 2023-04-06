@@ -1,6 +1,165 @@
-<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>broch.tech</title><link>https://broch.tech/</link><description>Recent content on broch.tech</description><language>en-gb</language><lastBuildDate>Thu, 25 Feb 2021 00:00:00 +0000</lastBuildDate><atom:link href="https://broch.tech/index.xml" rel="self" type="application/rss+xml"/><item><title>Checking Password Strength in Elm, Part 2: Have I Been Pwned API</title><link>https://broch.tech/posts/elm-have-i-been-pwned/</link><pubDate>Mon, 05 Mar 2018 00:00:00 +0000</pubDate><guid>https://broch.tech/posts/elm-have-i-been-pwned/</guid><description>&lt;p>In the &lt;a href="https://broch.tech/posts/elm-zxcvbn">Part 1&lt;/a>, we used the Javascript library Zxcvn to check the strength of a password locally. Now we&amp;rsquo;ll extend the code to check the chosen password against the huge database maintained by &lt;a href="https://haveibeenpwned.com">Have I been pwned?&lt;/a>. The code for this part is similar, but instead of decoding the result of a call to Javascript to obtain our data, we make an HTTP request and decode the response.&lt;/p>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>broch.tech</title><link>https://broch.tech/</link><description>Recent content on broch.tech</description><language>en-gb</language><lastBuildDate>Thu, 06 Apr 2023 00:00:00 +0000</lastBuildDate><atom:link href="https://broch.tech/index.xml" rel="self" type="application/rss+xml"/><item><title>Flexible Tracing with Rust and OpenTelemetry OTLP</title><link>https://broch.tech/posts/rust-tracing-opentelemetry/</link><pubDate>Thu, 06 Apr 2023 00:00:00 +0000</pubDate><guid>https://broch.tech/posts/rust-tracing-opentelemetry/</guid><description>&lt;p>If you have been using log files all your life, the telemetry ecosytem can be a bit daunting for a newcomer. And if you&amp;rsquo;ve just discovered Rust&amp;rsquo;s &lt;a href="https://tokio.rs/#tk-lib-tracing">tracing&lt;/a> framework, it&amp;rsquo;s not immediately clear where to look beyond the basic examples. There are a lot of crates and APIs to get your head round and a lot of new terminology. This article isn&amp;rsquo;t intended to be a complete tutorial but will explain how to set up a configuration which works with multiple systems and hopefully provide some insight into how things fit together. For an overview of telemetry, the &lt;a href="https://opentelemetry.io/docs/concepts/observability-primer">OpenTelemetry Observability Primer&lt;/a> is a quick introduction. Note that tracing can theoretically take place across multiple processes, but we&amp;rsquo;ll only be dealing with exporting data from a single web application here. Source code for a working application can be found &lt;a href="https://github.com/tekul/rust-tracing-otlp">on github&lt;/a>.&lt;/p>
+&lt;h2 id="the-rust-tracing-and-telemetry-ecosystem">The Rust tracing and telemetry ecosystem&lt;/h2>
+&lt;p>Rust has its own &lt;a href="https://crates.io/crates/tracing">tracing framework&lt;/a>. Getting started with some logging to &lt;code>stdout&lt;/code> is easy. You can just add:&lt;/p>
+&lt;pre>&lt;code class="language-rust">tracing_subscriber::fmt().init();
+&lt;/code>&lt;/pre>
+&lt;p>to your &lt;code>main&lt;/code> function. If you are running a web application you can use integrations such as those for &lt;a href="https://docs.rs/tracing-actix-web/latest/tracing_actix_web/">actix&lt;/a> or &lt;a href="https://docs.rs/tower-http/latest/tower_http/trace/index.html">axum&lt;/a>, add some &lt;a href="https://docs.rs/tracing/0.1.37/tracing/index.html#events-1">tracing events&lt;/a> to your code and you will see output in the console &lt;sup id="fnref:1">&lt;a href="#fn:1" class="footnote-ref" role="doc-noteref">1&lt;/a>&lt;/sup>.&lt;/p>
+&lt;p>But you want more than console output, right? Tracing links the various &amp;ldquo;spans&amp;rdquo; and log events from a single HTTP request together and we want to see them collected in a dashboard so we can track what happened during each request, query the data and so on. At this point you might read about the &lt;a href="">&lt;code>tracing-opentelemetry&lt;/code>&lt;/a> and &lt;a href="">&lt;code>opentelemetry&lt;/code>&lt;/a> crates. The &lt;code>opentelemetry&lt;/code> crate lists yet more crates which you can use to export traces to various backends. One of these is &lt;a href="https://www.jaegertracing.io/">Jaeger&lt;/a> which is a popular open source tool, with a nice UI. You can easily run it locally using Docker, it&amp;rsquo;s often used in blog articles and many of the code samples on &lt;code>crates.io&lt;/code> use it.&lt;/p>
+&lt;p>This is roughly where I was about a year ago. I was working on a system which I&amp;rsquo;d integrated with Rust &lt;code>tracing&lt;/code> and copied one of those samples to export to Jaeger using the &lt;a href="https://crates.io/crates/opentelemetry-jaeger">&lt;code>opentelemetry-jaeger&lt;/code>&lt;/a> crate. But ideally we wanted to provide a binary to users and allow them to choose their own telemetry backend. OpenTelemetry didn&amp;rsquo;t seem to be providing a lot of value if we had to comile against a different integration crate each time 🤔.&lt;/p>
+&lt;p>On revisiting this issue and doing a bit more research, I realised that OpenTelemetry defines &lt;a href="https://opentelemetry.io/docs/reference/specification/protocol/">its own protocol&lt;/a>, OTLP (hence the &amp;ldquo;Open&amp;rdquo; 🙄), and that it is &lt;em>directly supported&lt;/em> by Jaeger as well as by many &lt;a href="https://opentelemetry.io/ecosystem/vendors/">commercial vendors&lt;/a>. In fact, Jaeger has now deprecated its own clients in favour of OTLP, so the &lt;code>opentelemetry-jaeger&lt;/code> crate is really redundant.&lt;/p>
+&lt;p>This makes things much simpler. Hiding in that big list of OpenTelemetry crates is &lt;a href="https://crates.io/crates/opentelemetry-otlp">&lt;code>opentelemetry-otlp&lt;/code>&lt;/a>. If we use that then hopefully our system will &amp;ldquo;just work&amp;rdquo; with these compatible backends.&lt;/p>
+&lt;p>Let&amp;rsquo;s see how far we can get.&lt;/p>
+&lt;h2 id="required-crates">Required crates&lt;/h2>
+&lt;p>For a setup combining Rust tracing and OpenTelemetry/OTLP we need the following crates:&lt;/p>
+&lt;ul>
+&lt;li>&lt;code>tracing&lt;/code> &amp;ndash; to instrument our Rust code.&lt;/li>
+&lt;li>&lt;code>tracing-subscriber&lt;/code> &amp;ndash; allows us to listen for tracing events and define how they are filtered and exported.&lt;/li>
+&lt;li>&lt;code>opentelemetry&lt;/code> &amp;ndash; OpenTelemetry&amp;rsquo;s view of tracing, spans, etc.&lt;/li>
+&lt;li>&lt;code>tracing-opentelemetry&lt;/code> &amp;ndash; provides a compatibility layer between the two.&lt;/li>
+&lt;li>&lt;code>opentelemetry-otlp&lt;/code> &amp;ndash; the protocol implementation to export data to Jaeger or some other backend.&lt;/li>
+&lt;/ul>
+&lt;p>The &lt;code>tracing-subscriber&lt;/code> crate also helpfully processes messages generated by code using the &lt;code>log&lt;/code> crate &lt;sup id="fnref:2">&lt;a href="#fn:2" class="footnote-ref" role="doc-noteref">2&lt;/a>&lt;/sup>, converting them to tracing events. This is useful if you&amp;rsquo;re using a library such as &lt;code>tokio-postgres&lt;/code> and want to see the interactions with the database during a request.&lt;/p>
+&lt;p>Some of these crates are maintained by the tokio tracing team and some are part of the OpenTelemetry organization. It&amp;rsquo;s important that the versions are compatible or you can get errors as everything is still quite unstable. Some of the code also requires specific crate features to be enabled. The &lt;code>Cargo.toml&lt;/code> file from the &lt;a href="https://github.com/tekul/rust-tracing-otlp">example code&lt;/a> can be used as a starting point.&lt;/p>
+&lt;h2 id="basic-tracing-setup">Basic Tracing Setup&lt;/h2>
+&lt;p>Rust tracing allows us to instrument our code to generate spans and events. We then need to define at least one &lt;a href="https://docs.rs/tracing-core/0.1.30/tracing_core/subscriber/trait.Subscriber.html">&lt;code>Subscriber&lt;/code>&lt;/a> to capture and log these events somewhere. The code &lt;code>tracing_subscriber::fmt().init();&lt;/code> creates a simple subscriber which, by default, writes timestamped output to the console similar to a traditional log.
+This is roughly equivalent to &lt;sup id="fnref:3">&lt;a href="#fn:3" class="footnote-ref" role="doc-noteref">3&lt;/a>&lt;/sup>:&lt;/p>
+&lt;pre>&lt;code class="language-rust">use tracing_subscriber::prelude::*;
+let fmt_layer = tracing_subscriber::fmt::layer();
+tracing_subscriber::registry().with(fmt_layer).init();
+&lt;/code>&lt;/pre>
+&lt;p>&lt;a href="https://docs.rs/tracing-subscriber/0.3.16/tracing_subscriber/layer/index.html">Layers&lt;/a> allow us to use multiple subscribers if we want, and also to add filtering. An easy way to add filtering is to add an &lt;a href="https://docs.rs/tracing-subscriber/0.3.16/tracing_subscriber/struct.EnvFilter.html">&lt;code>EnvFilter&lt;/code>&lt;/a> as an extra layer:&lt;/p>
+&lt;pre>&lt;code class="language-rust">tracing_subscriber::registry()
+.with(fmt_layer)
+.with(tracing_subscriber::EnvFilter::from_default_env())
+.init();
+&lt;/code>&lt;/pre>
+&lt;p>This will filter the output based on the value of the environment variable &lt;code>RUST_LOG&lt;/code> &lt;sup id="fnref:4">&lt;a href="#fn:4" class="footnote-ref" role="doc-noteref">4&lt;/a>&lt;/sup>.&lt;/p>
+&lt;p>Now try running the sample application:&lt;/p>
+&lt;pre>&lt;code class="language-shell">$ RUST_LOG=&amp;quot;info&amp;quot; cargo run
+&lt;/code>&lt;/pre>
+&lt;p>We see some log messages as the server starts up.&lt;/p>
+&lt;pre>&lt;code>2023-04-03T12:17:04.513692Z INFO rust_tracing_otlp: Starting server
+2023-04-03T12:17:04.515377Z INFO actix_server::builder: starting 2 workers
+&lt;/code>&lt;/pre>
+&lt;p>Now if we request the &lt;code>/rand&lt;/code> endpoint which generates and returns a random number:&lt;/p>
+&lt;pre>&lt;code class="language-shell">$ curl localhost:8080/rand
+Hello. Your random number is 7789005614985398892.
+&lt;/code>&lt;/pre>
+&lt;p>But we don&amp;rsquo;t see anything in the server log 🤔. Why doesn&amp;rsquo;t our request span appear? This is part of the way the &lt;code>fmt&lt;/code> subscriber works. It logs the events in our code (where we have &lt;code>debug&lt;/code>, &lt;code>trace&lt;/code> etc), but doesn&amp;rsquo;t log spans by default &lt;sup id="fnref:5">&lt;a href="#fn:5" class="footnote-ref" role="doc-noteref">5&lt;/a>&lt;/sup>. If we enable debug level logging then we will see output during our request, since we have debug statements in the request handler:&lt;/p>
+&lt;pre>&lt;code class="language-shell">$ RUST_LOG=&amp;quot;debug,h2=warn&amp;quot; cargo run
+...
+2023-04-03T12:50:27.485688Z INFO rust_tracing_otlp: Starting server
+2023-04-03T12:50:27.487449Z INFO actix_server::builder: starting 2 workers
+2023-04-03T12:50:27.487473Z INFO actix_server::server: Tokio runtime found; starting in existing Tokio runtime
+2023-04-03T12:50:30.626347Z DEBUG HTTP request{http.method=GET http.route=/rand http.flavor=1.1 http.scheme=http http.host=localhost:8080 http.client_ip=127.0.0.1 http.user_agent=curl/8.0.1 http.target=/rand otel.name=HTTP GET /rand otel.kind=&amp;quot;server&amp;quot; request_id=a862d880-dd54-4a3f-a175-101b1e00b5f9}:get_random: rust_tracing_otlp: Generating random number
+2023-04-03T12:50:30.626389Z DEBUG HTTP request{http.method=GET http.route=/rand http.flavor=1.1 http.scheme=http http.host=localhost:8080 http.client_ip=127.0.0.1 http.user_agent=curl/8.0.1 http.target=/rand otel.name=HTTP GET /rand otel.kind=&amp;quot;server&amp;quot; request_id=a862d880-dd54-4a3f-a175-101b1e00b5f9}:get_random: rust_tracing_otlp: Value is 5478471227533226790
+&lt;/code>&lt;/pre>
+&lt;p>The additional attributes added by &lt;code>tracing-actix-web&lt;/code> are also visible with each log message. This is still unstructured logging though. Events are logged individually and events from different requests may be interleaved.&lt;/p>
+&lt;h2 id="adding-opentelemetry-to-the-mix">Adding OpenTelemetry to the mix&lt;/h2>
+&lt;p>As a first step towards using OpenTelemetry, we can swap the &lt;code>fmt&lt;/code> layer for an &lt;code>opentelemetry&lt;/code> &lt;code>stdout&lt;/code> &amp;ldquo;tracer&amp;rdquo;. We then use &lt;code>tracing_opentelemetry&lt;/code> to convert it to a layer compatible with our previous code:&lt;/p>
+&lt;pre>&lt;code class="language-rust">let tracer = opentelemetry::sdk::export::trace::stdout::new_pipeline().install_simple();
+let telemetry_layer = tracing_opentelemetry::layer().with_tracer(tracer);
+tracing_subscriber::registry()
+.with(tracing_subscriber::EnvFilter::from_default_env())
+//.with(fmt_layer)
+.with(telemetry_layer)
+.init();
+&lt;/code>&lt;/pre>
+&lt;p>This outputs OpenTelemetry data structures to the console, but the output is very dense and &lt;code>fmt&lt;/code> is definitely preferable if you want human readable console logging.&lt;/p>
+&lt;h2 id="exporting-to-jaeger-with-otlp">Exporting to Jaeger with OTLP&lt;/h2>
+&lt;p>To use OTLP, we just replace the &lt;code>stdout&lt;/code> tracer with one from &lt;code>opentelemetry-otlp&lt;/code>:&lt;/p>
+&lt;pre>&lt;code class="language-rust">...
+let tracer = opentelemetry_otlp::new_pipeline()
+.tracing()
+.with_exporter(opentelemetry_otlp::new_exporter().tonic())
+.install_batch(opentelemetry::runtime::Tokio)
+.expect(&amp;quot;Couldn't create OTLP tracer&amp;quot;);
+let telemetry_layer = tracing_opentelemetry::layer().with_tracer(tracer);
+tracing_subscriber::registry()
+.with(tracing_subscriber::EnvFilter::from_default_env())
+.with(fmt_layer)
+.with(telemetry_layer)
+.init();
+&lt;/code>&lt;/pre>
+&lt;p>We&amp;rsquo;ve added &lt;code>fmt_layer&lt;/code> back in here, so that we get console logging to compare with what we see in Jaeger. We&amp;rsquo;re also using a batch exporter which exports data periodically and is recommended for performance. Apart from that everything is the same.&lt;/p>
+&lt;p>Now pull the docker image for &lt;code>jaeger/all-in-one:latest&lt;/code> and run the Jaeger server:&lt;/p>
+&lt;pre>&lt;code>$ docker run -d --name jaeger -e COLLECTOR_OTLP_ENABLED=true -p 16686:16686 -p 4317:4317 -p 4318:4318 jaegertracing/all-in-one:latest
+&lt;/code>&lt;/pre>
+&lt;p>You can then view the UI by browsing to &lt;code>http://localhost:16686&lt;/code>. Ports 4317 and 4318 are used for OTLP over gRPC and HTTP respectively. The &lt;code>tonic&lt;/code> exporter we&amp;rsquo;ve configured means we are using gRPC here.&lt;/p>
+&lt;p>We can use the environment variable &lt;code>OTEL_SERVICE_NAME&lt;/code> to avoid hard-coding a name for our service:&lt;/p>
+&lt;pre>&lt;code class="language-shell">OTEL_SERVICE_NAME=randy RUST_LOG=&amp;quot;debug,h2=warn&amp;quot; cargo run
+&lt;/code>&lt;/pre>
+&lt;p>You will be able to find your requests in the UI. Note that unlike the &lt;code>fmt&lt;/code> subscriber, our spans will appear as Jaeger traces even if we don&amp;rsquo;t have debug logging enabled. Spans and events which occur during a request are shown as children of their parent span. For example, the request handler function &lt;code>get_random&lt;/code> has the excellent &lt;a href="https://docs.rs/tracing/0.1.37/tracing/attr.instrument.html">&lt;code>#[instrument]&lt;/code>&lt;/a> macro applied, which does most of the work for us and causes it to appear as a child span.&lt;/p>
+&lt;p>&lt;img src="jaeger-ui-rand.webp" alt="/rand request trace in Jaeger">&lt;/p>
+&lt;p>There will probably be some other traces for &lt;code>GET default&lt;/code> requests. This may be confusing, since we don&amp;rsquo;t see anything about these in our console logging but they appear in the OpenTelemetry output. These are our browser&amp;rsquo;s requests for &lt;code>favicon.ico&lt;/code> which are returning a 404.&lt;/p>
+&lt;h2 id="exporting-to-an-online-provider">Exporting to an online provider&lt;/h2>
+&lt;p>In the previous example, the exporter uses a default endpoint which happens to be where our Jaeger server is listening (&lt;code>http://127.0.0.1:4317&lt;/code>). The OpenTelemetry SDK in theory allows us to override the endpoint and other settings by using &lt;a href="https://opentelemetry.io/docs/concepts/sdk-configuration/otlp-exporter-configuration/">predefined environment variables&lt;/a>.&lt;/p>
+&lt;p>Can we use the same code and configure it for any provider by just setting these variables?&lt;/p>
+&lt;h3 id="honeycomb">Honeycomb&lt;/h3>
+&lt;p>I signed up for a vendor with a free (non-expiring) plan, Honeycomb. &lt;a href="https://docs.honeycomb.io/getting-data-in/opentelemetry-overview/#using-the-honeycomb-opentelemetry-endpoint">Their documentation&lt;/a> recommends the same OpenTelemetry crates we are already using and says we should set the variables:&lt;/p>
+&lt;pre>&lt;code>OTEL_EXPORTER_OTLP_ENDPOINT=api.honeycomb.io:443
+OTEL_EXPORTER_OTLP_HEADERS=&amp;quot;x-honeycomb-team=your-api-key&amp;quot;
+&lt;/code>&lt;/pre>
+&lt;p>This endpoint will cause an &amp;ldquo;invalid URI&amp;rdquo; error unless we prefix it with &amp;ldquo;https://&amp;rdquo; so that&amp;rsquo;s the first thing we need to change. Also, the variable &lt;code>OTEL_EXPORTER_OTLP_HEADERS&lt;/code> isn&amp;rsquo;t recognised by Rust opentelemetry, so we have to parse that ourselves for now &lt;sup id="fnref:6">&lt;a href="#fn:6" class="footnote-ref" role="doc-noteref">6&lt;/a>&lt;/sup>. We also need to tell tonic that we want to use TLS &lt;sup id="fnref:7">&lt;a href="#fn:7" class="footnote-ref" role="doc-noteref">7&lt;/a>&lt;/sup>. The code for the exporter would look something like this (note that &lt;code>parse_metadata_from_env&lt;/code> doesn&amp;rsquo;t actually exist in the code):&lt;/p>
+&lt;pre>&lt;code class="language-rust">let exporter = opentelemetry_otlp::new_exporter()
+.tonic()
+.with_metadata(parse_metadata_from_env())
+.with_tls_config(Default::default())
+.with_env();
+&lt;/code>&lt;/pre>
+&lt;p>&lt;a href="https://docs.rs/opentelemetry-otlp/0.12.0/opentelemetry_otlp/trait.WithExportConfig.html#tymethod.with_env">&lt;code>with_env&lt;/code>&lt;/a> configures it from the environment variables that is does support.&lt;/p>
+&lt;p>For maximum flexibility we might also want to be able to use the &lt;code>http/protobuf&lt;/code> protocol rather than being restricted to gRPC. So the final version of the example code reads the value of the &lt;a href="https://opentelemetry.io/docs/reference/specification/protocol/exporter/#specify-protocol">&lt;code>OTEL_EXPORTER_OTLP_PROTOCOL&lt;/code>&lt;/a> environment variable to decide what to use (it defaults to &amp;ldquo;grpc&amp;rdquo; if it&amp;rsquo;s not set).
+It also checks &lt;code>OTEL_EXPORTER_OTLP_ENDPOINT&lt;/code> to see whether it starts with &lt;code>https&lt;/code>, before deciding whether to enable TLS for the grpc/tonic exporter. That way we can still use it locally with Jaeger, for example &lt;sup id="fnref:8">&lt;a href="#fn:8" class="footnote-ref" role="doc-noteref">8&lt;/a>&lt;/sup>.&lt;/p>
+&lt;p>If we run the app with:&lt;/p>
+&lt;pre>&lt;code>OTEL_EXPORTER_OTLP_ENDPOINT=https://api.honeycomb.io:443 OTEL_EXPORTER_OTLP_HEADERS=&amp;quot;x-honeycomb-team=your-api-key&amp;quot; OTEL_EXPORTER_OTLP=grpc OTEL_SERVICE_NAME=randy RUST_LOG=&amp;quot;debug,h2=warn&amp;quot; cargo run
+&lt;/code>&lt;/pre>
+&lt;p>we can finally see our request traces in Honeycomb&amp;rsquo;s dashboard and view individual spans:&lt;/p>
+&lt;p>&lt;img src="honeycomb-rand.webp" alt="/rand request trace in Honeycomb">&lt;/p>
+&lt;p>It works!&lt;/p>
+&lt;h3 id="aspecto">Aspecto&lt;/h3>
+&lt;p>Just to check, I signed up for another free provider, Aspecto, and changed the endpoint and headers:&lt;/p>
+&lt;pre>&lt;code>OTEL_EXPORTER_OTLP_ENDPOINT=https://otelcol.aspecto.io:4317 OTEL_EXPORTER_OTLP_HEADERS=&amp;quot;Authorization=your-api-key&amp;quot; OTEL_SERVICE_NAME=randy RUST_LOG=&amp;quot;debug,h2=warn&amp;quot; cargo run
+&lt;/code>&lt;/pre>
+&lt;p>This worked immediately! &lt;sup id="fnref:9">&lt;a href="#fn:9" class="footnote-ref" role="doc-noteref">9&lt;/a>&lt;/sup>:&lt;/p>
+&lt;p>&lt;img src="aspecto-rand.webp" alt="/rand request trace in Aspecto">&lt;/p>
+&lt;h2 id="conclusion">Conclusion&lt;/h2>
+&lt;p>There&amp;rsquo;s a lot more to tracing and telemetry than what we&amp;rsquo;ve covered here, but we&amp;rsquo;ve successfully created a setup that should work with different OpenTelemetry providers, without the need to recompile our app. We can easily configure it using standard environment variables (which will hopefully be supported directly by the opentelemetry libraries some day). This gives us local event logging along with exporting of tracing spans to an OpenTelemetry traces endpoint.&lt;/p>
+&lt;p>One issue I had along the way is that it&amp;rsquo;s not obvious what&amp;rsquo;s going on between the opentelemetry client and the endpoint (who traces the tracers 🙂?). When using &lt;code>http/proto&lt;/code> I only worked out that I was missing the &lt;code>/v1/traces&lt;/code> part of the endpoint URI when I swapped the default &lt;code>reqwest&lt;/code> client with one which dumped the request and response to the console. Then I realised the endpoint was returing a &lt;code>404&lt;/code> which was being ignored. I haven&amp;rsquo;t worked out if this is possible with gRPC and the &lt;code>tonic&lt;/code> version, since I didn&amp;rsquo;t have any similar issues.&lt;/p>
+&lt;p>Overall though I&amp;rsquo;m very pleased with the results and the ecosystem is a pleasure to use, thanks to the many people who have worked hard on the various projects involved to get things to where they are today. Instrumenting your code with Rust tracing is a breeze (particularly using the excellent &lt;code>instrument&lt;/code> macro) and exporting to OpenTelemetry seems to be the way to go if you want to export your data to the cloud. Both the providers used above are easy to sign up for with no commitment, and their free plans should be adequate for a small app.&lt;/p>
+&lt;div class="footnotes" role="doc-endnotes">
+&lt;hr>
+&lt;ol>
+&lt;li id="fn:1">
+&lt;p>The example app code is a web application using actix, so the root spans we export are created by the &lt;code>tracing-actix-web&lt;/code> middleware.&amp;#160;&lt;a href="#fnref:1" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:2">
+&lt;p>It defines the &lt;code>tracing-log&lt;/code> crate as an &lt;a href="https://doc.rust-lang.org/cargo/reference/features.html#optional-dependencies">optional dependency&lt;/a> but it is enabled by default. This confused me a bit to start with because I found references to this feature flag and didn&amp;rsquo;t know that optional dependencies implicitly define features for a crate in Rust.&amp;#160;&lt;a href="#fnref:2" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:3">
+&lt;p>The &lt;code>tracing_subscriber::prelude::*&lt;/code> import adds in extension traits which provide the &lt;code>with&lt;/code> and &lt;code>init&lt;/code> &lt;code>Subscriber&lt;/code> methods used here. We&amp;rsquo;ll assume this is used in further code snippets.&amp;#160;&lt;a href="#fnref:3" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:4">
+&lt;p>For example, you might set &lt;code>RUST_LOG='debug,h2=warn&lt;/code> which will output debug level events but suppress anything below warn level from the &lt;code>h2&lt;/code> crate which generates a lot of low-level messages which might drown out those from your application.&amp;#160;&lt;a href="#fnref:4" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:5">
+&lt;p>You can change this behaviour by calling the &lt;a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/fmt/struct.Layer.html#method.with_span_events">with_span_events&lt;/a> method when creating the subscriber.&amp;#160;&lt;a href="#fnref:5" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:6">
+&lt;p>There is &lt;a href="https://github.com/open-telemetry/opentelemetry-rust/issues/984">an issue open to support more variables&lt;/a>.&amp;#160;&lt;a href="#fnref:6" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:7">
+&lt;p>The &lt;code>tls&lt;/code> and &lt;code>tls-roots&lt;/code> features need to be enabled on the tonic crate in order to create a connection and validate the server certificate.&amp;#160;&lt;a href="#fnref:7" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:8">
+&lt;p>Note that you might run into &lt;a href="https://github.com/open-telemetry/opentelemetry-rust/issues/997">this issue&lt;/a> when using the HTTP exporter. In the meantime you have to append &lt;code>/v1/traces&lt;/code> to the URL for both Jaeger and Honeycomb.&amp;#160;&lt;a href="#fnref:8" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:9">
+&lt;p>This is a lie, I used the wrong port number to start with.&amp;#160;&lt;a href="#fnref:9" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;/ol>
+&lt;/div></description></item><item><title>Checking Password Strength in Elm, Part 2: Have I Been Pwned API</title><link>https://broch.tech/posts/elm-have-i-been-pwned/</link><pubDate>Mon, 05 Mar 2018 00:00:00 +0000</pubDate><guid>https://broch.tech/posts/elm-have-i-been-pwned/</guid><description>&lt;p>In the &lt;a href="https://broch.tech/posts/elm-zxcvbn">Part 1&lt;/a>, we used the Javascript library Zxcvn to check the strength of a password locally. Now we&amp;rsquo;ll extend the code to check the chosen password against the huge database maintained by &lt;a href="https://haveibeenpwned.com">Have I been pwned?&lt;/a>. The code for this part is similar, but instead of decoding the result of a call to Javascript to obtain our data, we make an HTTP request and decode the response.&lt;/p>
 &lt;p>The full code for both parts can be found &lt;a href="https://github.com/tekul/elm-password-check">on github&lt;/a>.&lt;/p>
-&lt;div class="w-full px-10 py-10 border rounded-md shadow mx-auto sm:w-2/3">
+&lt;div class="w-full px-10 py-10 border rounded-md shadow-lg bg-neutral-200 text-neutral-700 dark:shadow-none mx-auto sm:w-2/3">
 &lt;div id="app">&lt;/div>
 &lt;/div>
 &lt;script src="https://broch.tech/posts/elm-zxcvbn/app.js">&lt;/script>
@@ -89,7 +248,7 @@ String.lines response
 &lt;p>The full code for both parts can be found &lt;a href="https://github.com/tekul/elm-password-check">on github&lt;/a>.&lt;/p>
 &lt;p>Zxcvbn is a password strength estimator which makes use of password frequency lists, dictionaries and common patterns. Note that the default version is heavily biased towards English language so it would need to be built with custom dictionaries if that&amp;rsquo;s an issue &lt;sup id="fnref:1">&lt;a href="#fn:1" class="footnote-ref" role="doc-noteref">1&lt;/a>&lt;/sup>.&lt;/p>
 &lt;p>The strength of a password is based on estimating the number of guesses it would take for a password cracker to find it. It&amp;rsquo;s not perfect, but is better than forcing annoying rules on users such as adding &lt;a href="https://www.xkcd.com/936/">numbers and symbols to passwords&lt;/a> which is no longer seen as good practice. Standards authorities like NIST now &lt;a href="https://stealthbits.com/blog/nist-password-guidelines/">recommend&lt;/a> disallowing simple sequences and rejecting passwords which are found in password breach databases.&lt;/p>
-&lt;div id="elm-zxcvbn-app" class="w-full mt-10 px-10 py-10 border rounded-md shadow mx-auto sm:w-2/3">
+&lt;div id="elm-zxcvbn-app" class="w-full mt-10 px-10 py-10 border rounded-md shadow-lg bg-neutral-200 text-neutral-700 dark:shadow-none mx-auto sm:w-2/3">
 &lt;div id="app">&lt;/div>
 &lt;/div>
 &lt;script src="app.js">&lt;/script>
@@ -169,7 +328,7 @@ passwordChecked PasswordChecked
 &lt;/div>
 &lt;div id="controls" class="mt-2">
 &lt;label for="numSlits">Number of slits&lt;/label>
-&lt;select id="numSlits" onchange="changeSlits()">
+&lt;select class="text-neutral-500" id="numSlits" onchange="changeSlits()">
 &lt;option value="1">1&lt;/option>
 &lt;option value="2" selected>2&lt;/option>
 &lt;option value="3">3&lt;/option>
